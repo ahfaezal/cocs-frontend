@@ -17,7 +17,7 @@ export interface AICluster {
   suggestedCategory: ClusterSuggestionCategory;
   cardIds: string[];
   cards: DACUMCard[];
-  notes?: string;
+  notes: string;
 }
 
 export interface AIClusterResult {

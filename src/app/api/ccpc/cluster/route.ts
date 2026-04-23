@@ -6,6 +6,13 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+type OpenAIClusterDraft = {
+  clusterName?: string;
+  suggestedCategory?: "Core Candidate" | "Elective Candidate" | "Review Required";
+  notes?: string;
+  items?: string[];
+};
+
 function normalizeText(text: string): string {
   return text
     .toLowerCase()
@@ -18,14 +25,16 @@ function dedupeCards(cards: DACUMCard[]): DACUMCard[] {
   const seen = new Set<string>();
 
   return cards.filter((card) => {
-    const key = normalizeText(card.text);
-    if (!key || seen.has(key)) return false;
-    seen.add(key);
+    const normalized = normalizeText(card.text || "");
+    if (!normalized || seen.has(normalized)) return false;
+    seen.add(normalized);
     return true;
   });
 }
 
-function getSuggestedCategory(name: string): AICluster["suggestedCategory"] {
+function getSuggestedCategory(
+  name: string
+): AICluster["suggestedCategory"] {
   const text = name.toLowerCase();
 
   if (
@@ -73,13 +82,6 @@ function extractJsonArray(text: string): string | null {
   if (start === -1 || end === -1 || end <= start) return null;
   return text.slice(start, end + 1);
 }
-
-type OpenAIClusterDraft = {
-  clusterName: string;
-  suggestedCategory?: "Core Candidate" | "Elective Candidate" | "Review Required";
-  notes?: string;
-  items: string[];
-};
 
 function buildFallbackResult(cards: DACUMCard[]): AIClusterResult {
   return {
@@ -189,43 +191,53 @@ ${numberedList}
 
     const usedCardIds = new Set<string>();
 
-const clusters = parsed
-  .map((cluster, index) => {
-    const matchedCards = uniqueCards.filter((card) =>
-      (cluster.items || []).some(
-        (itemText) => normalizeText(itemText) === normalizeText(card.text)
-      )
+    const clusters: AICluster[] = parsed.reduce<AICluster[]>(
+      (acc, cluster, index) => {
+        const clusterItems = Array.isArray(cluster.items) ? cluster.items : [];
+
+        const matchedCards = uniqueCards.filter((card) =>
+          clusterItems.some(
+            (itemText) => normalizeText(itemText) === normalizeText(card.text)
+          )
+        );
+
+        if (matchedCards.length === 0) {
+          return acc;
+        }
+
+        matchedCards.forEach((card) => usedCardIds.add(card.id));
+
+        const suggestedName =
+          cluster.clusterName?.trim() || `Cluster ${index + 1}`;
+
+        const suggestedCategory =
+          cluster.suggestedCategory === "Core Candidate" ||
+          cluster.suggestedCategory === "Elective Candidate" ||
+          cluster.suggestedCategory === "Review Required"
+            ? cluster.suggestedCategory
+            : getSuggestedCategory(suggestedName);
+
+        const mappedCluster: AICluster = {
+          id: `CL-${String(index + 1).padStart(2, "0")}`,
+          suggestedName,
+          confidence: buildConfidence(matchedCards.length),
+          suggestedCategory,
+          cardIds: matchedCards.map((card) => card.id),
+          cards: matchedCards,
+          notes:
+            cluster.notes?.trim() ||
+            "AI mengenal pasti tugasan ini sebagai satu kelompok kerja yang berkaitan.",
+        };
+
+        acc.push(mappedCluster);
+        return acc;
+      },
+      []
     );
 
-    matchedCards.forEach((card) => usedCardIds.add(card.id));
-
-    if (matchedCards.length === 0) return null;
-
-    const suggestedName =
-      cluster.clusterName?.trim() || `Cluster ${index + 1}`;
-
-    const suggestedCategory =
-      cluster.suggestedCategory === "Core Candidate" ||
-      cluster.suggestedCategory === "Elective Candidate" ||
-      cluster.suggestedCategory === "Review Required"
-        ? cluster.suggestedCategory
-        : getSuggestedCategory(suggestedName);
-
-    return {
-      id: `CL-${String(index + 1).padStart(2, "0")}`,
-      suggestedName,
-      confidence: buildConfidence(matchedCards.length),
-      suggestedCategory,
-      cardIds: matchedCards.map((card) => card.id),
-      cards: matchedCards,
-      notes:
-        cluster.notes?.trim() ||
-        "AI mengenal pasti tugasan ini sebagai satu kelompok kerja yang berkaitan.",
-    };
-  })
-  .filter((cluster): cluster is AICluster => cluster !== null) as AICluster[];
-
-    const unmatchedCards = uniqueCards.filter((card) => !usedCardIds.has(card.id));
+    const unmatchedCards = uniqueCards.filter(
+      (card) => !usedCardIds.has(card.id)
+    );
 
     const result: AIClusterResult = {
       totalCards: incomingCards.length,
