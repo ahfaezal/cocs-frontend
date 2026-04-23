@@ -50,12 +50,12 @@ function getSuggestedCategory(name: string): AICluster["suggestedCategory"] {
   return "Review Required";
 }
 
-function buildConfidence(clusterSize: number, totalCards: number): number {
+function buildConfidence(clusterSize: number): number {
   if (clusterSize >= 6) return 92;
   if (clusterSize >= 4) return 88;
   if (clusterSize >= 3) return 84;
   if (clusterSize >= 2) return 80;
-  return totalCards > 10 ? 72 : 75;
+  return 72;
 }
 
 function safeJsonParse<T>(value: string): T | null {
@@ -74,6 +74,13 @@ function extractJsonArray(text: string): string | null {
   return text.slice(start, end + 1);
 }
 
+type OpenAIClusterDraft = {
+  clusterName: string;
+  suggestedCategory?: "Core Candidate" | "Elective Candidate" | "Review Required";
+  notes?: string;
+  items: string[];
+};
+
 function buildFallbackResult(cards: DACUMCard[]): AIClusterResult {
   return {
     totalCards: cards.length,
@@ -84,13 +91,6 @@ function buildFallbackResult(cards: DACUMCard[]): AIClusterResult {
     unmatchedCards: cards,
   };
 }
-
-type OpenAIClusterDraft = {
-  clusterName: string;
-  items: string[];
-  notes?: string;
-  suggestedCategory?: string;
-};
 
 export async function POST(req: NextRequest) {
   try {
@@ -114,12 +114,11 @@ export async function POST(req: NextRequest) {
     console.log("UNIQUE CARDS:", uniqueCards.length);
 
     if (!process.env.OPENAI_API_KEY) {
-      console.warn("Missing OPENAI_API_KEY. Returning fallback result.");
-
+      console.warn("OPENAI_API_KEY missing. Returning fallback result.");
       return NextResponse.json(buildFallbackResult(uniqueCards));
     }
 
-    const cardList = uniqueCards
+    const numberedList = uniqueCards
       .map((card, index) => `${index + 1}. ${card.text}`)
       .join("\n");
 
@@ -129,7 +128,7 @@ Anda ialah pakar Occupational Analysis, DACUM, NOSS, dan pembangunan standard ko
 Tugas anda:
 1. Kelompokkan senarai tugas DACUM di bawah kepada beberapa cluster kompetensi kerja yang logik.
 2. Setiap cluster mesti mengandungi tugasan yang benar-benar berkaitan.
-3. Jangan paksa semua item masuk cluster. Jika item terlalu umum / terpencil / kurang jelas, biarkan ia tidak dipadankan.
+3. Jangan paksa semua item masuk cluster. Jika item terlalu umum, terpencil, atau tidak cukup jelas, biarkan ia tidak dipadankan.
 4. Cadangkan nama cluster yang ringkas, profesional, dan sesuai untuk competency analysis.
 5. Cadangkan kategori:
    - "Core Candidate"
@@ -137,8 +136,9 @@ Tugas anda:
    - "Review Required"
 
 Pulangkan jawapan dalam JSON ARRAY SAHAJA.
-Jangan beri penerangan lain.
-Jangan bungkus dengan markdown.
+Jangan beri ulasan tambahan.
+Jangan guna markdown.
+Jangan tulis perkataan selain JSON.
 
 Format wajib:
 [
@@ -154,17 +154,17 @@ Format wajib:
 ]
 
 Senarai tugas DACUM:
-${cardList}
+${numberedList}
 `;
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-4.1-mini",
+      model: "gpt-4o-mini",
       temperature: 0.2,
       messages: [
         {
           role: "system",
           content:
-            "Anda pakar analisis kompetensi kerja, DACUM, NOSS, dan TVET Malaysia. Anda mesti memulangkan JSON yang sah sahaja.",
+            "Anda pakar analisis kompetensi, DACUM, NOSS, TVET Malaysia, dan mesti memulangkan JSON yang sah sahaja.",
         },
         {
           role: "user",
@@ -184,7 +184,6 @@ ${cardList}
 
     if (!parsed || !Array.isArray(parsed)) {
       console.warn("OpenAI output invalid JSON. Returning fallback result.");
-
       return NextResponse.json(buildFallbackResult(uniqueCards));
     }
 
@@ -194,8 +193,7 @@ ${cardList}
       .map((cluster, index) => {
         const matchedCards = uniqueCards.filter((card) =>
           (cluster.items || []).some(
-            (itemText) =>
-              normalizeText(itemText) === normalizeText(card.text)
+            (itemText) => normalizeText(itemText) === normalizeText(card.text)
           )
         );
 
@@ -216,7 +214,7 @@ ${cardList}
         return {
           id: `CL-${String(index + 1).padStart(2, "0")}`,
           suggestedName,
-          confidence: buildConfidence(matchedCards.length, uniqueCards.length),
+          confidence: buildConfidence(matchedCards.length),
           suggestedCategory,
           cardIds: matchedCards.map((card) => card.id),
           cards: matchedCards,
