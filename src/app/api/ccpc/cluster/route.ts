@@ -124,30 +124,42 @@ export async function POST(req: NextRequest) {
       .map((card, index) => `${index + 1}. ${card.text}`)
       .join("\n");
 
-    const prompt = `
-Anda ialah pakar Occupational Analysis, DACUM, NOSS, dan pembangunan standard kompetensi kerja di Malaysia.
+const prompt = `
+You are an expert in Occupational Analysis, DACUM, and NOSS (Malaysia competency standards).
 
-Tugas anda:
-1. Kelompokkan senarai tugas DACUM di bawah kepada beberapa cluster kompetensi kerja yang logik.
-2. Setiap cluster mesti mengandungi tugasan yang benar-benar berkaitan.
-3. Jangan paksa semua item masuk cluster. Jika item terlalu umum, terpencil, atau tidak cukup jelas, biarkan ia tidak dipadankan.
-4. Cadangkan nama cluster yang ringkas, profesional, dan sesuai untuk competency analysis.
-5. Cadangkan kategori:
-   - "Core Candidate"
-   - "Elective Candidate"
-   - "Review Required"
+Your task:
 
-Pulangkan jawapan dalam JSON ARRAY SAHAJA.
-Jangan beri ulasan tambahan.
-Jangan guna markdown.
-Jangan tulis perkataan selain JSON.
+1. First, determine the primary orientation of the occupation based on the given DACUM cards:
+   - Product-based (producing tangible outputs)
+   - Service-based (providing specific services)
+   - Quality/Support service (supporting operations, coordination, administration)
 
-Format wajib:
+2. Then cluster the DACUM tasks based on the MAIN WORK OUTPUT (not just wording similarity).
+
+3. Clustering rules:
+   - Product-based → group by product type
+   - Service-based → group by type of service provided
+   - Quality/Support → group by functional responsibility
+
+4. Do NOT group based on superficial similarity of words.
+5. Only group tasks that are functionally related.
+6. Leave unrelated or unclear items as unmatched.
+
+7. Generate:
+   - professional cluster name (Bahasa Melayu)
+   - category:
+     - "Core Candidate"
+     - "Elective Candidate"
+     - "Review Required"
+
+Return ONLY JSON array. No explanation. No markdown.
+
+Format:
 [
   {
     "clusterName": "Pengurusan Operasi Harian Masjid",
     "suggestedCategory": "Core Candidate",
-    "notes": "Cluster ini menghimpunkan tugasan operasi asas harian masjid.",
+    "notes": "Cluster ini menghimpunkan tugasan operasi harian masjid.",
     "items": [
       "Pantau perjalanan program masjid",
       "Sedia jadual tugas bilal"
