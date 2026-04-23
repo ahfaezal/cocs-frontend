@@ -189,41 +189,41 @@ ${numberedList}
 
     const usedCardIds = new Set<string>();
 
-    const clusters: AICluster[] = parsed
-      .map((cluster, index) => {
-        const matchedCards = uniqueCards.filter((card) =>
-          (cluster.items || []).some(
-            (itemText) => normalizeText(itemText) === normalizeText(card.text)
-          )
-        );
+const clusters = parsed
+  .map((cluster, index) => {
+    const matchedCards = uniqueCards.filter((card) =>
+      (cluster.items || []).some(
+        (itemText) => normalizeText(itemText) === normalizeText(card.text)
+      )
+    );
 
-        matchedCards.forEach((card) => usedCardIds.add(card.id));
+    matchedCards.forEach((card) => usedCardIds.add(card.id));
 
-        if (matchedCards.length === 0) return null;
+    if (matchedCards.length === 0) return null;
 
-        const suggestedName =
-          cluster.clusterName?.trim() || `Cluster ${index + 1}`;
+    const suggestedName =
+      cluster.clusterName?.trim() || `Cluster ${index + 1}`;
 
-        const suggestedCategory =
-          cluster.suggestedCategory === "Core Candidate" ||
-          cluster.suggestedCategory === "Elective Candidate" ||
-          cluster.suggestedCategory === "Review Required"
-            ? cluster.suggestedCategory
-            : getSuggestedCategory(suggestedName);
+    const suggestedCategory =
+      cluster.suggestedCategory === "Core Candidate" ||
+      cluster.suggestedCategory === "Elective Candidate" ||
+      cluster.suggestedCategory === "Review Required"
+        ? cluster.suggestedCategory
+        : getSuggestedCategory(suggestedName);
 
-        return {
-          id: `CL-${String(index + 1).padStart(2, "0")}`,
-          suggestedName,
-          confidence: buildConfidence(matchedCards.length),
-          suggestedCategory,
-          cardIds: matchedCards.map((card) => card.id),
-          cards: matchedCards,
-          notes:
-            cluster.notes?.trim() ||
-            "AI mengenal pasti tugasan ini sebagai satu kelompok kerja yang berkaitan.",
-        } satisfies AICluster;
-      })
-      .filter((cluster): cluster is AICluster => cluster !== null);
+    return {
+      id: `CL-${String(index + 1).padStart(2, "0")}`,
+      suggestedName,
+      confidence: buildConfidence(matchedCards.length),
+      suggestedCategory,
+      cardIds: matchedCards.map((card) => card.id),
+      cards: matchedCards,
+      notes:
+        cluster.notes?.trim() ||
+        "AI mengenal pasti tugasan ini sebagai satu kelompok kerja yang berkaitan.",
+    };
+  })
+  .filter((cluster): cluster is AICluster => cluster !== null) as AICluster[];
 
     const unmatchedCards = uniqueCards.filter((card) => !usedCardIds.has(card.id));
 
