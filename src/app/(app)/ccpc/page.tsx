@@ -98,7 +98,6 @@ function CCPCPageContent() {
       setAiClusterResult({
         clusters: generatedClusters,
         unmatchedCards: [],
-        matchedCards: [],
         totalCards: result.total_items || 0,
         uniqueCards: result.total_items || 0,
         suggestedClusterCount: generatedClusters.length,
