@@ -20,7 +20,7 @@ import { API_URL, DEFAULT_SESSION_ID } from "@/lib/env";
 
 function CCPCPageContent() {
   const searchParams = useSearchParams();
-  const projectId = searchParams.get("projectId");
+  const queryProjectId = searchParams.get("projectId") || "";
 
   const [viewMode, setViewMode] = useState<"builder" | "document">("builder");
   const [aiClusterResult, setAiClusterResult] =
@@ -28,6 +28,10 @@ function CCPCPageContent() {
   const [selectedClusterId, setSelectedClusterId] =
     useState<string | null>(null);
   const [isRunningClustering, setIsRunningClustering] = useState(false);
+
+  const [projectList, setProjectList] = useState<any[]>([]);
+  const [selectedProjectId, setSelectedProjectId] =
+    useState(queryProjectId);
 
   const [projectInfo, setProjectInfo] = useState({
     title: "Bricklayer (Wet Trade) Level 3",
@@ -41,13 +45,35 @@ function CCPCPageContent() {
   const clusters = aiClusterResult?.clusters ?? [];
 
   useEffect(() => {
-    async function loadProject() {
-      if (!projectId) return;
-
+    async function loadProjects() {
       try {
-        const res = await fetch(`${API_URL}/projects/${projectId}`, {
+        const res = await fetch(`${API_URL}/projects`, {
           cache: "no-store",
         });
+
+        if (!res.ok) return;
+
+        const data = await res.json();
+        setProjectList(Array.isArray(data) ? data : data.projects || []);
+      } catch (error) {
+        console.error("Gagal load projek:", error);
+      }
+    }
+
+    loadProjects();
+  }, []);
+
+  useEffect(() => {
+    async function loadProject() {
+      if (!selectedProjectId) return;
+
+      try {
+        const res = await fetch(
+          `${API_URL}/projects/${selectedProjectId}`,
+          {
+            cache: "no-store",
+          }
+        );
 
         if (!res.ok) return;
 
@@ -72,7 +98,7 @@ function CCPCPageContent() {
     }
 
     loadProject();
-  }, [projectId]);
+  }, [selectedProjectId]);
 
   async function handleRunAIClustering() {
     try {
@@ -88,9 +114,7 @@ function CCPCPageContent() {
         }),
       });
 
-      if (!res.ok) {
-        throw new Error("AI clustering gagal.");
-      }
+      if (!res.ok) throw new Error();
 
       const result = await res.json();
       const generatedClusters = result.clusters || [];
@@ -104,7 +128,9 @@ function CCPCPageContent() {
         status: "ready",
       });
 
-      setSelectedClusterId(String(generatedClusters?.[0]?.id || ""));
+      setSelectedClusterId(
+        String(generatedClusters?.[0]?.id || "")
+      );
     } catch (error) {
       console.error(error);
       alert("Gagal menjalankan AI clustering.");
@@ -127,7 +153,7 @@ function CCPCPageContent() {
         }
       />
 
-      <div className="mb-2 flex flex-wrap items-center gap-2 text-sm text-slate-500">
+      <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
         <span>Dashboard</span>
         <ChevronRight size={16} />
         <span>Projek COCS</span>
@@ -135,6 +161,34 @@ function CCPCPageContent() {
         <span className="font-medium text-slate-700">
           Competency Analysis (CCPC)
         </span>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <label className="mb-2 block text-sm font-semibold text-slate-700">
+          Pilih Projek COCS
+        </label>
+
+        <select
+          value={selectedProjectId}
+          onChange={(e) =>
+            setSelectedProjectId(e.target.value)
+          }
+          className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
+        >
+          <option value="">Sila pilih projek</option>
+
+          {projectList.map((item) => (
+            <option key={item.id} value={item.id}>
+              {(item.project_code ||
+                item.code ||
+                `COCS/${item.id}`) +
+                " – " +
+                (item.project_title ||
+                  item.title ||
+                  "Untitled Project")}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="flex items-center justify-between">
@@ -147,6 +201,7 @@ function CCPCPageContent() {
             <h1 className="text-4xl font-bold text-slate-900">
               Competency Analysis (CCPC)
             </h1>
+
             <p className="mt-1 text-base text-slate-500">
               Bangunkan competency cluster menggunakan DACUM + AI clustering.
             </p>
@@ -190,7 +245,6 @@ function CCPCPageContent() {
           </div>
 
           <PanelSubmissionList />
-
           <LiveBoardToolbar />
           <DacumCardGrid />
 
@@ -200,6 +254,7 @@ function CCPCPageContent() {
                 <h3 className="text-lg font-bold text-blue-700">
                   Kawalan AI Clustering
                 </h3>
+
                 <p className="text-sm text-slate-500">
                   Jalankan clustering AI berdasarkan DACUM Card.
                 </p>
