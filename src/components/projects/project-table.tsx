@@ -102,17 +102,17 @@ export function ProjectTable({ projects }: { projects: ProjectItem[] }) {
                   <td className="px-4 py-4">
                     <div className="flex items-center justify-center gap-2">
                       <Link
-                        href={`/projects/${item.id}`}
+                        href={`/ccpc?projectId=${item.id}`}
                         className="rounded-lg border border-slate-200 p-2 hover:bg-slate-100"
-                        title="Lihat projek"
+                        title="Buka CCPC projek"
                       >
                         <Eye size={16} />
                       </Link>
 
                       <Link
-                        href={`/projects/${item.id}/edit`}
+                        href={`/ccpc?projectId=${item.id}`}
                         className="rounded-lg border border-slate-200 p-2 hover:bg-slate-100"
-                        title="Edit projek"
+                        title="Sambung pembangunan projek"
                       >
                         <Pencil size={16} />
                       </Link>

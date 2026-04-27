@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { ChevronRight, Info } from "lucide-react";
 
 import { CCPCHeader } from "@/components/ccpc/ccpc-header";
@@ -15,10 +16,12 @@ import { CCPCAIClusterList } from "@/components/ccpc/CCPCAIClusterList";
 import { CCPCDocumentMode } from "@/components/ccpc/ccpc-document-mode";
 
 import { AIClusterResult } from "@/lib/ccpc-ai-types";
-
 import { API_URL, DEFAULT_SESSION_ID } from "@/lib/env";
 
 export default function CCPCPage() {
+  const searchParams = useSearchParams();
+  const projectId = searchParams.get("projectId");
+
   const [viewMode, setViewMode] = useState<"builder" | "document">("builder");
   const [aiClusterResult, setAiClusterResult] =
     useState<AIClusterResult | null>(null);
@@ -27,7 +30,54 @@ export default function CCPCPage() {
   );
   const [isRunningClustering, setIsRunningClustering] = useState(false);
 
+  const [projectInfo, setProjectInfo] = useState({
+    title: "Bricklayer (Wet Trade) Level 3",
+    code: "COCS/2024/001",
+    bidang: "Bricklaying (Wet Trade)",
+    tahap: "3",
+    status: "Dalam Pembangunan",
+    laluanKerjaya: "Kerja Batu dan Konkrit",
+  });
+
   const clusters = aiClusterResult?.clusters ?? [];
+
+  useEffect(() => {
+    async function loadProject() {
+      if (!projectId) return;
+
+      try {
+        const res = await fetch(`${API_URL}/projects/${projectId}`, {
+          cache: "no-store",
+        });
+
+        if (!res.ok) {
+          console.error("Gagal load project:", await res.text());
+          return;
+        }
+
+        const data = await res.json();
+
+        setProjectInfo({
+          title: data.project_title || data.title || "Untitled Project",
+          code: data.project_code || data.code || `COCS/${data.id}`,
+          bidang: data.field || data.bidang || data.sector || "-",
+          tahap: String(data.level || data.tahap || "-"),
+          status: data.status || "Dalam Pembangunan",
+          laluanKerjaya:
+            data.occupation ||
+            data.trade ||
+            data.area ||
+            data.field ||
+            data.bidang ||
+            "-",
+        });
+      } catch (error) {
+        console.error("Gagal mendapatkan maklumat projek:", error);
+      }
+    }
+
+    loadProject();
+  }, [projectId]);
 
   const handleRunAIClustering = async () => {
     try {
@@ -72,12 +122,12 @@ export default function CCPCPage() {
   return (
     <div className="space-y-6">
       <CCPCHeader
-        projectTitle="COCS/2024/001 – Bricklayer (Wet Trade) Level 3"
-        status="Dalam Pembangunan"
-        bidang="Bricklaying (Wet Trade)"
-        tahap="3"
-        laluanKerjaya="Kerja Batu dan Konkrit"
-        tarikhKemaskini="20 Mei 2024"
+        projectTitle={`${projectInfo.code} – ${projectInfo.title}`}
+        status={projectInfo.status}
+        bidang={projectInfo.bidang}
+        tahap={projectInfo.tahap}
+        laluanKerjaya={projectInfo.laluanKerjaya}
+        tarikhKemaskini={new Date().toLocaleDateString("ms-MY")}
         jumlahKompetensi={
           clusters.length > 0 ? `${clusters.length} Cluster` : "Belum Dijana"
         }
