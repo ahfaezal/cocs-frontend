@@ -1,14 +1,21 @@
 "use client";
 
-import {
-  CircleDot,
-  Clock3,
-  Users,
-  StickyNote,
-} from "lucide-react";
+import { CircleDot, Clock3, Users, StickyNote } from "lucide-react";
 import { DEFAULT_SESSION_ID } from "@/lib/env";
 
-export function DacumSessionCard() {
+type DacumSessionCardProps = {
+  sessionName?: string;
+  standardTitle?: string;
+};
+
+export function DacumSessionCard({
+  sessionName,
+  standardTitle,
+}: DacumSessionCardProps) {
+  const finalSessionName = sessionName || DEFAULT_SESSION_ID;
+  const finalStandardTitle =
+    standardTitle || "Bricklayer (Wet Trade) Level 3";
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="border-b border-slate-200 px-5 py-4">
@@ -25,7 +32,8 @@ export function DacumSessionCard() {
 
           <input
             className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-            defaultValue={DEFAULT_SESSION_ID}
+            value={finalSessionName}
+            readOnly
           />
         </div>
 
@@ -36,8 +44,8 @@ export function DacumSessionCard() {
 
           <input
             className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 outline-none"
-            defaultValue="Bricklayer (Wet Trade) Level 3"
-            disabled
+            value={finalStandardTitle}
+            readOnly
           />
         </div>
 
@@ -47,7 +55,6 @@ export function DacumSessionCard() {
               <CircleDot size={16} />
               Status Sesi
             </div>
-
             <div className="mt-2 text-lg font-semibold text-emerald-700">
               Live / Aktif
             </div>
@@ -58,7 +65,6 @@ export function DacumSessionCard() {
               <Clock3 size={16} />
               Mula Sesi
             </div>
-
             <div className="mt-2 text-lg font-semibold text-slate-900">
               21 Mei 2026, 9:00 AM
             </div>
@@ -69,7 +75,6 @@ export function DacumSessionCard() {
               <Users size={16} />
               Jumlah Panel
             </div>
-
             <div className="mt-2 text-lg font-semibold text-slate-900">
               8 Panel
             </div>
@@ -80,7 +85,6 @@ export function DacumSessionCard() {
               <StickyNote size={16} />
               Kad Diterima
             </div>
-
             <div className="mt-2 text-lg font-semibold text-slate-900">
               36 Kad
             </div>

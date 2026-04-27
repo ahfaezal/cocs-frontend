@@ -45,23 +45,29 @@ function CCPCPageContent() {
   const clusters = aiClusterResult?.clusters ?? [];
 
   useEffect(() => {
-    async function loadProjects() {
-      try {
-        const res = await fetch(`${API_URL}/projects`, {
-          cache: "no-store",
-        });
+  async function loadProjects() {
+    try {
+      const res = await fetch(`${API_URL}/projects`, {
+        cache: "no-store",
+      });
 
-        if (!res.ok) return;
+      if (!res.ok) return;
 
-        const data = await res.json();
-        setProjectList(Array.isArray(data) ? data : data.projects || []);
-      } catch (error) {
-        console.error("Gagal load projek:", error);
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : data.projects || [];
+
+      setProjectList(list);
+
+      if (!selectedProjectId && list.length > 0) {
+        setSelectedProjectId(String(list[0].id));
       }
+    } catch (error) {
+      console.error("Gagal load projek:", error);
     }
+  }
 
-    loadProjects();
-  }, []);
+  loadProjects();
+}, []);
 
   useEffect(() => {
     async function loadProject() {
@@ -240,7 +246,10 @@ function CCPCPageContent() {
           <CCPCStepProgress />
 
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-            <DacumSessionCard />
+            <DacumSessionCard
+              sessionName={projectInfo.title.toLowerCase().replaceAll(" ", "-")}
+              standardTitle={projectInfo.title}
+            />
             <PanelQRCodeCard />
           </div>
 
