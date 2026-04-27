@@ -16,7 +16,7 @@ import { CCPCDocumentMode } from "@/components/ccpc/ccpc-document-mode";
 
 import { AIClusterResult } from "@/lib/ccpc-ai-types";
 
-import { API_URL, SESSION_ID } from "@/lib/env";
+import { API_URL, DEFAULT_SESSION_ID } from "@/lib/env";
 
 export default function CCPCPage() {
   const [viewMode, setViewMode] = useState<"builder" | "document">("builder");
@@ -36,7 +36,7 @@ export default function CCPCPage() {
       const response = await fetch(`${API_URL}/ccpc/cluster`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ session_id: SESSION_ID }),
+        body: JSON.stringify({ session_id: DEFAULT_SESSION_ID }),
       });
 
       if (!response.ok) throw new Error("Gagal menjalankan AI clustering");
