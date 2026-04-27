@@ -56,7 +56,15 @@ export default function NewProjectPage() {
       const tahapNumber = Number(String(form.tahap).replace(/\D/g, "")) || 1;
       const tahunNumber = Number(form.tahun) || new Date().getFullYear();
 
+      const projectCode = `COCS/${tahunNumber}/${Date.now()
+        .toString()
+        .slice(-4)}`;
+
       const payload = {
+        project_code: projectCode,
+        code: projectCode,
+        kodProjek: projectCode,
+
         title: form.tajukProjek.trim(),
         project_title: form.tajukProjek.trim(),
 
