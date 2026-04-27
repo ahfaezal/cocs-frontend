@@ -7,31 +7,9 @@ import { PageHeader } from "@/components/shared/page-header";
 import { ProjectFilterBar } from "@/components/projects/project-filter-bar";
 import { ProjectTable } from "@/components/projects/project-table";
 import { API_URL } from "@/lib/env";
-import type { ProjectStatus } from "@/types/project";
+import type { ProjectItem, ProjectStatus } from "@/types/project";
 
-type ProjectItem = {
-  id: number | string;
-  kodProjek?: string;
-  project_code?: string;
-  code?: string;
-  tajukProjek?: string;
-  title?: string;
-  project_title?: string;
-  bidang?: string;
-  field?: string;
-  sector?: string;
-  tahap?: string | number;
-  level?: string | number;
-  jenis?: string;
-  type?: string;
-  status?: string;
-  progress?: number;
-  kemajuan?: number;
-  tarikhCipta?: string;
-  created_at?: string;
-};
-
-function normalizeProject(project: ProjectItem) {
+function normalizeProject(project: any): ProjectItem {
   return {
     id: project.id,
     kodProjek:
@@ -44,7 +22,8 @@ function normalizeProject(project: ProjectItem) {
       project.project_title ||
       project.title ||
       "Untitled Project",
-    bidang:
+    bidangTred:
+      project.bidangTred ||
       project.bidang ||
       project.field ||
       project.sector ||
@@ -53,15 +32,12 @@ function normalizeProject(project: ProjectItem) {
     jenis: project.jenis || project.type || "Baru",
     status: (project.status || "Dalam Pembangunan") as ProjectStatus,
     progress: Number(project.progress ?? project.kemajuan ?? 0),
-    tarikhCipta:
-      project.tarikhCipta ||
-      project.created_at ||
-      "-",
+    tarikhCipta: project.tarikhCipta || project.created_at || "-",
   };
 }
 
 export default function ProjectsPage() {
-  const [projects, setProjects] = useState<ReturnType<typeof normalizeProject>[]>(
+  const [projects, setProjects] = useState<ProjectItem[]>([]);
     []
   );
   const [loading, setLoading] = useState(true);
