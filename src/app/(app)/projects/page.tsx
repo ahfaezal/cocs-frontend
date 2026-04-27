@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { ProjectFilterBar } from "@/components/projects/project-filter-bar";
 import { ProjectTable } from "@/components/projects/project-table";
 import { API_URL } from "@/lib/env";
+import type { ProjectStatus } from "@/types/project";
 
 type ProjectItem = {
   id: number | string;
@@ -50,7 +51,7 @@ function normalizeProject(project: ProjectItem) {
       "Belum Ditetapkan",
     tahap: project.tahap || project.level || "-",
     jenis: project.jenis || project.type || "Baru",
-    status: project.status || "Dalam Pembangunan",
+    status: (project.status || "Dalam Pembangunan") as ProjectStatus,
     progress: Number(project.progress ?? project.kemajuan ?? 0),
     tarikhCipta:
       project.tarikhCipta ||

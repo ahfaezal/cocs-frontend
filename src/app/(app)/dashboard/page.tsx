@@ -16,6 +16,7 @@ import { StatCard } from "@/components/shared/stat-card";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { ProgressBar } from "@/components/shared/progress-bar";
 import { API_URL } from "@/lib/env";
+import type { ProjectStatus } from "@/types/project";
 
 type ProjectItem = {
   id: number | string;
@@ -54,7 +55,7 @@ function normalizeProject(project: ProjectItem) {
       project.sector ||
       "Belum Ditetapkan",
     tahap: project.tahap || project.level || "-",
-    status: project.status || "Dalam Pembangunan",
+    status: (project.status || "Dalam Pembangunan") as ProjectStatus,
     kemajuan: Number(project.kemajuan ?? project.progress ?? 0),
   };
 }
