@@ -16,12 +16,7 @@ import { CCPCDocumentMode } from "@/components/ccpc/ccpc-document-mode";
 
 import { AIClusterResult } from "@/lib/ccpc-ai-types";
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-
-const SESSION_ID =
-  process.env.NEXT_PUBLIC_DEFAULT_SESSION_ID ||
-  "bricklaying-level-3";
+import { API_URL, SESSION_ID } from "@/lib/env";
 
 export default function CCPCPage() {
   const [viewMode, setViewMode] = useState<"builder" | "document">("builder");

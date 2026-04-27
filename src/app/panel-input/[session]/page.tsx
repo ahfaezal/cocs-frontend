@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 import { useParams } from "next/navigation";
-
-const API_URL = "http://127.0.0.1:8000";
+import { API_URL } from "@/lib/env";
 
 export default function PanelInputPage() {
   const params = useParams();
@@ -13,6 +12,7 @@ export default function PanelInputPage() {
   const [task, setTask] = useState("");
   const [loading, setLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
 
   async function handleSubmit() {
     if (!task.trim()) return;
@@ -20,6 +20,7 @@ export default function PanelInputPage() {
     try {
       setLoading(true);
       setSuccessMessage("");
+      setErrorMessage("");
 
       const res = await fetch(`${API_URL}/ccpc/card`, {
         method: "POST",
@@ -28,8 +29,8 @@ export default function PanelInputPage() {
         },
         body: JSON.stringify({
           session_id: session,
-          panel_name: panelName || "Panel",
-          task_text: task,
+          panel_name: panelName.trim() || "Panel",
+          task_text: task.trim(),
         }),
       });
 
@@ -41,7 +42,9 @@ export default function PanelInputPage() {
       setSuccessMessage("Kad DACUM berjaya dihantar ke Live Board.");
     } catch (error) {
       console.error(error);
-      alert("Gagal hantar kad. Pastikan backend sedang berjalan.");
+      setErrorMessage(
+        "Gagal hantar kad. Pastikan backend sedang berjalan."
+      );
     } finally {
       setLoading(false);
     }
@@ -94,7 +97,14 @@ export default function PanelInputPage() {
             </div>
           )}
 
+          {errorMessage && (
+            <div className="mt-3 rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+              {errorMessage}
+            </div>
+          )}
+
           <button
+            type="button"
             onClick={handleSubmit}
             disabled={loading || !task.trim()}
             className="mt-4 w-full rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-400"

@@ -11,10 +11,7 @@ import {
 } from "lucide-react";
 
 import { DacumCardGrid } from "@/components/ccpc/dacum-card-grid";
-
-const SESSION_ID =
-  process.env.NEXT_PUBLIC_DEFAULT_SESSION_ID ||
-  "bricklaying-level-3";
+import { DEFAULT_SESSION_ID } from "@/lib/env";
 
 export default function LiveBoardPage() {
   const [freeze, setFreeze] = useState(false);
@@ -34,7 +31,7 @@ export default function LiveBoardPage() {
               </h1>
 
               <p className="text-sm text-slate-500">
-                Session: {SESSION_ID}
+                Session: {DEFAULT_SESSION_ID}
               </p>
             </div>
           </div>

@@ -3,10 +3,7 @@
 import { useEffect, useState } from "react";
 import QRCode from "react-qr-code";
 import { Check, Copy, RefreshCw, Smartphone } from "lucide-react";
-
-const SESSION_ID =
-  process.env.NEXT_PUBLIC_DEFAULT_SESSION_ID ||
-  "bricklaying-level-3";
+import { DEFAULT_SESSION_ID } from "@/lib/env";
 
 export function PanelQRCodeCard() {
   const [panelUrl, setPanelUrl] = useState("");
@@ -15,7 +12,7 @@ export function PanelQRCodeCard() {
   useEffect(() => {
     if (typeof window !== "undefined") {
       setPanelUrl(
-        `${window.location.origin}/panel-input/${SESSION_ID}`
+        `${window.location.origin}/panel-input/${DEFAULT_SESSION_ID}`
       );
     }
   }, []);
@@ -39,13 +36,13 @@ export function PanelQRCodeCard() {
   function refreshQR() {
     if (typeof window !== "undefined") {
       setPanelUrl(
-        `${window.location.origin}/panel-input/${SESSION_ID}?t=${Date.now()}`
+        `${window.location.origin}/panel-input/${DEFAULT_SESSION_ID}?t=${Date.now()}`
       );
     }
   }
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <div id="qr-panel" className="rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="border-b border-slate-200 px-5 py-4">
         <h2 className="text-lg font-bold text-blue-700">
           QR Code & Panel Input
@@ -61,9 +58,7 @@ export function PanelQRCodeCard() {
           {panelUrl ? (
             <QRCode value={panelUrl} size={140} />
           ) : (
-            <span className="text-xs text-slate-400">
-              Loading QR...
-            </span>
+            <span className="text-xs text-slate-400">Loading QR...</span>
           )}
         </div>
 
@@ -82,9 +77,7 @@ export function PanelQRCodeCard() {
         <div className="mt-4 rounded-xl bg-blue-50 px-4 py-3 text-sm text-blue-700">
           <div className="flex gap-2">
             <Smartphone size={18} />
-            <span>
-              Panel hanya perlu scan QR ini menggunakan telefon.
-            </span>
+            <span>Panel hanya perlu scan QR ini menggunakan telefon.</span>
           </div>
         </div>
 

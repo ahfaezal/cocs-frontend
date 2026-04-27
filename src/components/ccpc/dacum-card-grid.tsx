@@ -1,12 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-
-const SESSION_ID =
-  process.env.NEXT_PUBLIC_DEFAULT_SESSION_ID || "bricklaying-level-3";
+import { API_URL, DEFAULT_SESSION_ID } from "@/lib/env";
 
 type CCPCCard = {
   id: number;
@@ -26,7 +21,7 @@ export function DacumCardGrid() {
     try {
       setError("");
 
-      const res = await fetch(`${API_URL}/ccpc/cards/${SESSION_ID}`, {
+      const res = await fetch(`${API_URL}/ccpc/cards/${DEFAULT_SESSION_ID}`, {
         cache: "no-store",
       });
 

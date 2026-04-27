@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-
-const API_URL = "http://127.0.0.1:8000";
-const SESSION_ID = "bricklaying-level-3";
+import { API_URL, DEFAULT_SESSION_ID } from "@/lib/env";
 
 type CCPCCard = {
   id: number;
@@ -27,18 +25,39 @@ export function CCPCClusteringSummary({
 }: CCPCClusteringSummaryProps) {
   const [cards, setCards] = useState<CCPCCard[]>([]);
   const [clusters, setClusters] = useState<CCPCCluster[]>([]);
+  const [errorMessage, setErrorMessage] = useState("");
 
   async function loadSummary() {
     try {
-      const cardsRes = await fetch(`${API_URL}/ccpc/cards/${SESSION_ID}`);
-      const cardsData = await cardsRes.json();
-      setCards(cardsData || []);
+      setErrorMessage("");
 
-      const clustersRes = await fetch(`${API_URL}/ccpc/clusters/${SESSION_ID}`);
+      const cardsRes = await fetch(
+        `${API_URL}/ccpc/cards/${DEFAULT_SESSION_ID}`,
+        { cache: "no-store" }
+      );
+
+      if (!cardsRes.ok) {
+        throw new Error("Gagal mendapatkan kad DACUM.");
+      }
+
+      const cardsData = await cardsRes.json();
+      setCards(Array.isArray(cardsData) ? cardsData : []);
+
+      const clustersRes = await fetch(
+        `${API_URL}/ccpc/clusters/${DEFAULT_SESSION_ID}`,
+        { cache: "no-store" }
+      );
+
+      if (!clustersRes.ok) {
+        setClusters([]);
+        return;
+      }
+
       const clustersData = await clustersRes.json();
-      setClusters(clustersData || []);
+      setClusters(Array.isArray(clustersData) ? clustersData : []);
     } catch (error) {
       console.error("Gagal load clustering summary:", error);
+      setErrorMessage("Sambungan ke backend gagal. Sila semak API server.");
     }
   }
 
@@ -63,9 +82,15 @@ export function CCPCClusteringSummary({
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="border-b border-slate-200 px-5 py-4">
         <h3 className="text-lg font-bold text-blue-700">
-          Kawalan AI Clustering
+          Ringkasan AI Clustering
         </h3>
       </div>
+
+      {errorMessage && (
+        <div className="mx-4 mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+          {errorMessage}
+        </div>
+      )}
 
       <div className="grid gap-4 p-4 lg:grid-cols-4">
         <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
@@ -91,7 +116,15 @@ export function CCPCClusteringSummary({
 
         <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
           <p className="text-sm text-slate-500">Status AI</p>
-          <p className="mt-2 text-xl font-bold text-emerald-700">
+          <p
+            className={`mt-2 text-xl font-bold ${
+              isRunning
+                ? "text-amber-600"
+                : suggestedClusterCount > 0
+                ? "text-emerald-700"
+                : "text-slate-600"
+            }`}
+          >
             {statusLabel}
           </p>
         </div>

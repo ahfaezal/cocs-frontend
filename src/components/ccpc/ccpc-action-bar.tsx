@@ -5,30 +5,27 @@ import {
   QrCode,
   ExternalLink,
   Snowflake,
-  Sparkles,
   BadgeCheck,
   FileOutput,
 } from "lucide-react";
 
+import { DEFAULT_SESSION_ID } from "@/lib/env";
+
 export function CCPCActionBar() {
   const router = useRouter();
 
-  const sessionId = "bricklaying-level-3";
+  const sessionId = DEFAULT_SESSION_ID;
 
   const handleOpenPanelInput = () => {
     router.push(`/panel-input/${sessionId}`);
   };
 
   const handleGenerateQR = () => {
-    alert("QR Panel akan dijana untuk sesi: " + sessionId);
+    router.push("/ccpc#qr-panel");
   };
 
   const handleFreezeBoard = () => {
-    alert("Board berjaya dibekukan.");
-  };
-
-  const handleRunClustering = () => {
-    alert("AI Clustering sedang dijalankan...");
+    router.push("/ccpc/live-board");
   };
 
   const handleApproveCluster = () => {
@@ -42,7 +39,6 @@ export function CCPCActionBar() {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
       <div className="flex flex-wrap items-center gap-3">
-
         <button
           onClick={handleGenerateQR}
           className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 font-medium text-blue-700 transition hover:bg-slate-50"
@@ -68,14 +64,6 @@ export function CCPCActionBar() {
         </button>
 
         <button
-          onClick={handleRunClustering}
-          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 font-medium text-purple-700 transition hover:bg-purple-50"
-        >
-          <Sparkles size={16} />
-          Run AI Clustering
-        </button>
-
-        <button
           onClick={handleApproveCluster}
           className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-white px-4 py-3 font-medium text-emerald-700 transition hover:bg-emerald-50"
         >
@@ -90,7 +78,6 @@ export function CCPCActionBar() {
           <FileOutput size={16} />
           Generate CCPC
         </button>
-
       </div>
     </div>
   );
