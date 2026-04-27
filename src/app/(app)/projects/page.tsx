@@ -38,8 +38,6 @@ function normalizeProject(project: any): ProjectItem {
 
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<ProjectItem[]>([]);
-    []
-  );
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
 
