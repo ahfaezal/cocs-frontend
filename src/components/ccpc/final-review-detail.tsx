@@ -1,171 +1,150 @@
 "use client";
 
-interface FinalReviewDetailProps {
-  clusterName?: string;
-  finalCategory?: string;
-  items?: string[];
-  approvedClusters?: number;
-  totalClusters?: number;
-  categorizedClusters?: number;
-  unassignedItems?: number;
-  onEditName?: () => void;
-  onSaveReview?: () => void;
-  onApproveCluster?: () => void;
-  onLockCluster?: () => void;
-}
+import { useEffect, useState } from "react";
+import { CheckCircle2, Pencil, Trash2, MoveRight } from "lucide-react";
 
-export function FinalReviewDetail({
-  clusterName = "Pengurusan Operasi Harian Masjid",
-  finalCategory = "Core",
-  items = [
-    "Pantau perjalanan program masjid",
-    "Sedia jadual tugas bilal",
-    "Ganti imam tidak hadir",
-    "Selaras tugasan jawatankuasa",
-    "Semak bacaan imam bertugas",
-    "Lafaz iqamah solat fardu",
-    "Pimpin bacaan wirid jemaah",
-    "Baca doa selepas solat",
-  ],
-  approvedClusters = 2,
-  totalClusters = 5,
-  categorizedClusters = 5,
-  unassignedItems = 4,
-  onEditName,
-  onSaveReview,
-  onApproveCluster,
-  onLockCluster,
-}: FinalReviewDetailProps) {
-  // pastikan semua nilai memang number
-  const approved = Number(approvedClusters);
-  const total = Number(totalClusters);
-  const categorized = Number(categorizedClusters);
-  const unassigned = Number(unassignedItems);
+const API_URL = "http://127.0.0.1:8000";
+const SESSION_ID = "bricklaying-level-3";
 
-  const canGenerate =
-    approved === total &&
-    categorized === total &&
-    unassigned === 0;
+type ClusterItem = {
+  id: number;
+  cluster_name: string;
+  suggested_category: string;
+  items_json: string;
+  notes: string;
+};
+
+export function FinalReviewDetail() {
+  const [clusters, setClusters] = useState<ClusterItem[]>([]);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+
+  async function loadClusters() {
+    try {
+      const res = await fetch(`${API_URL}/ccpc/clusters/${SESSION_ID}`);
+      const data = await res.json();
+      setClusters(data || []);
+
+      if (data?.length > 0 && selectedId === null) {
+        setSelectedId(data[0].id);
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+  useEffect(() => {
+    loadClusters();
+  }, []);
+
+  const activeCluster =
+    clusters.find((item) => item.id === selectedId) || null;
+
+  const items = activeCluster
+    ? JSON.parse(activeCluster.items_json || "[]")
+    : [];
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="border-b border-slate-200 px-5 py-4">
-        <h3 className="text-lg font-bold text-blue-700">
-          Perincian Semakan Cluster
-        </h3>
+    <div className="grid grid-cols-1 gap-6 xl:grid-cols-[320px_1fr]">
+      {/* LEFT */}
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-200 px-5 py-4">
+          <h2 className="text-lg font-bold text-blue-700">
+            Finalisasi Cluster
+          </h2>
+        </div>
+
+        <div className="space-y-3 p-4">
+          {clusters.map((cluster) => (
+            <button
+              key={cluster.id}
+              onClick={() => setSelectedId(cluster.id)}
+              className={`w-full rounded-2xl border px-4 py-4 text-left transition ${
+                selectedId === cluster.id
+                  ? "border-blue-400 bg-blue-50"
+                  : "border-slate-200 hover:bg-slate-50"
+              }`}
+            >
+              <div className="text-xs font-bold text-blue-700">
+                Cluster {cluster.id}
+              </div>
+
+              <div className="mt-1 font-bold text-slate-800">
+                {cluster.cluster_name}
+              </div>
+
+              <div className="mt-2 text-sm text-slate-500">
+                {cluster.suggested_category}
+              </div>
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className="space-y-5 p-5">
-        <div className="grid gap-4 lg:grid-cols-[1fr_180px]">
-          <div>
-            <label className="mb-2 block text-sm font-semibold text-slate-700">
-              Nama Cluster / Cadangan Kompetensi
-            </label>
-            <input
-              type="text"
-              value={clusterName}
-              readOnly
-              className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-800 outline-none"
-            />
+      {/* RIGHT */}
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+        {!activeCluster ? (
+          <div className="p-10 text-center text-slate-400">
+            Tiada cluster dipilih.
           </div>
+        ) : (
+          <>
+            <div className="border-b border-slate-200 px-6 py-5">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <div className="text-sm font-bold text-blue-700">
+                    Cluster {activeCluster.id}
+                  </div>
 
-          <div>
-            <label className="mb-2 block text-sm font-semibold text-slate-700">
-              Kategori Akhir
-            </label>
-            <select
-              value={finalCategory}
-              disabled
-              className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-800 outline-none"
-            >
-              <option value="Core">Core</option>
-              <option value="Elective">Elective</option>
-            </select>
-          </div>
-        </div>
+                  <h2 className="mt-1 text-2xl font-bold text-slate-900">
+                    {activeCluster.cluster_name}
+                  </h2>
 
-        <div className="rounded-xl bg-blue-50 px-4 py-4 text-sm text-slate-700">
-          Pada peringkat ini, fasilitator boleh memuktamadkan nama cluster,
-          tetapkan kategori akhir, dan meluluskan cluster untuk dijana ke format CCPC.
-        </div>
+                  <p className="mt-2 text-sm text-slate-500">
+                    {activeCluster.notes}
+                  </p>
+                </div>
 
-        <div>
-          <h4 className="mb-3 text-sm font-bold text-slate-800">
-            Item Dalam Cluster
-          </h4>
-
-          <div className="space-y-2">
-            {items.map((item, index) => (
-              <div
-                key={index}
-                className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700"
-              >
-                {item}
+                <div className="rounded-full bg-emerald-100 px-4 py-2 text-sm font-semibold text-emerald-700">
+                  {activeCluster.suggested_category}
+                </div>
               </div>
-            ))}
-          </div>
-        </div>
+            </div>
 
-        <div className="flex flex-wrap gap-3 pt-2">
-          <button
-            type="button"
-            onClick={onEditName}
-            className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            Edit Nama
-          </button>
+            <div className="space-y-3 px-6 py-6">
+              {items.map((item: string, index: number) => (
+                <div
+                  key={index}
+                  className="flex items-center justify-between rounded-xl border border-slate-200 px-4 py-3"
+                >
+                  <div className="text-sm font-medium text-slate-700">
+                    {index + 1}. {item}
+                  </div>
 
-          <button
-            type="button"
-            onClick={onSaveReview}
-            className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            Simpan Semakan
-          </button>
+                  <div className="flex items-center gap-2">
+                    <button className="rounded-lg border border-slate-200 p-2 hover:bg-slate-50">
+                      <MoveRight size={16} />
+                    </button>
 
-          <button
-            type="button"
-            onClick={onApproveCluster}
-            className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
-          >
-            Approve Cluster
-          </button>
+                    <button className="rounded-lg border border-slate-200 p-2 hover:bg-slate-50">
+                      <Pencil size={16} />
+                    </button>
 
-          <button
-            type="button"
-            onClick={onLockCluster}
-            className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700 hover:bg-amber-100"
-          >
-            Lock Cluster
-          </button>
-        </div>
+                    <button className="rounded-lg border border-red-200 p-2 text-red-600 hover:bg-red-50">
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
 
-        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
-          <p className="text-sm font-semibold text-slate-800">
-            Status Penjanaan CCPC
-          </p>
-          <p className="mt-2 text-sm text-slate-600">
-            Approved Clusters: <span className="font-semibold">{approved}</span> / {total}
-          </p>
-          <p className="text-sm text-slate-600">
-            Categorized Clusters: <span className="font-semibold">{categorized}</span> / {total}
-          </p>
-          <p className="text-sm text-slate-600">
-            Unassigned Items: <span className="font-semibold">{unassigned}</span>
-          </p>
-
-          <div className="mt-4">
-            {canGenerate ? (
-              <div className="rounded-xl bg-emerald-100 px-4 py-3 text-sm font-medium text-emerald-800">
-                Semua syarat dipenuhi. CCPC sedia untuk dijana.
-              </div>
-            ) : (
-              <div className="rounded-xl bg-amber-100 px-4 py-3 text-sm font-medium text-amber-800">
-                CCPC belum boleh dijana. Lengkapkan semua semakan terlebih dahulu.
-              </div>
-            )}
-          </div>
-        </div>
+            <div className="border-t border-slate-200 px-6 py-5">
+              <button className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-700">
+                <CheckCircle2 size={18} />
+                Approve Final Cluster
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

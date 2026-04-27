@@ -1,37 +1,38 @@
-const reviewClusters = [
-  {
-    code: "CL-01",
-    title: "Pengurusan Operasi Harian Masjid",
-    category: "Core",
-    approved: true,
-  },
-  {
-    code: "CL-02",
-    title: "Pentadbiran & Rekod Rasmi",
-    category: "Core",
-    approved: true,
-  },
-  {
-    code: "CL-03",
-    title: "Pengurusan Kewangan Masjid",
-    category: "Core",
-    approved: false,
-  },
-  {
-    code: "CL-04",
-    title: "Pengendalian Program & Dakwah",
-    category: "Elective",
-    approved: false,
-  },
-  {
-    code: "CL-05",
-    title: "Keselamatan, Fasiliti & Sokongan",
-    category: "Elective",
-    approved: false,
-  },
-];
+"use client";
+
+import { useEffect, useState } from "react";
+
+const API_URL = "http://127.0.0.1:8000";
+const SESSION_ID = "bricklaying-level-3";
+
+type ClusterItem = {
+  id: number;
+  clusterName: string;
+  suggestedCategory: string;
+  items: string[];
+  notes: string;
+};
 
 export function FinalReviewSidebar() {
+  const [clusters, setClusters] = useState<ClusterItem[]>([]);
+
+  async function loadClusters() {
+    try {
+      const res = await fetch(`${API_URL}/ccpc/clusters/${SESSION_ID}`);
+      const data = await res.json();
+      setClusters(data || []);
+    } catch (error) {
+      console.error("Gagal load final review clusters:", error);
+    }
+  }
+
+  useEffect(() => {
+    loadClusters();
+
+    const timer = setInterval(loadClusters, 3000);
+    return () => clearInterval(timer);
+  }, []);
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="border-b border-slate-200 px-5 py-4">
@@ -41,47 +42,65 @@ export function FinalReviewSidebar() {
       </div>
 
       <div className="space-y-3 px-5 py-5">
-        {reviewClusters.map((cluster) => (
-          <button
-            key={cluster.code}
-            className={`w-full rounded-2xl border px-4 py-4 text-left transition ${
-              cluster.code === "CL-01"
-                ? "border-blue-300 bg-blue-50"
-                : "border-slate-200 bg-white hover:bg-slate-50"
-            }`}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-sm font-bold text-blue-700">
-                  {cluster.code}
+        {clusters.length === 0 && (
+          <p className="text-sm text-slate-500">
+            Belum ada cluster untuk difinalkan.
+          </p>
+        )}
+
+        {clusters.map((cluster, index) => {
+          const category =
+            cluster.suggestedCategory === "Core Candidate"
+              ? "Core"
+              : cluster.suggestedCategory === "Elective Candidate"
+              ? "Elective"
+              : "Review";
+
+          return (
+            <button
+              key={cluster.id}
+              className={`w-full rounded-2xl border px-4 py-4 text-left transition ${
+                index === 0
+                  ? "border-blue-300 bg-blue-50"
+                  : "border-slate-200 bg-white hover:bg-slate-50"
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-bold text-blue-700">
+                    CL-{String(index + 1).padStart(2, "0")}
+                  </div>
+
+                  <div className="mt-1 text-base font-semibold text-slate-900">
+                    {cluster.clusterName}
+                  </div>
+
+                  <div className="mt-1 text-xs text-slate-500">
+                    {cluster.items.length} item
+                  </div>
                 </div>
-                <div className="mt-1 text-base font-semibold text-slate-900">
-                  {cluster.title}
+
+                <div className="text-right">
+                  <div
+                    className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                      category === "Core"
+                        ? "bg-emerald-100 text-emerald-700"
+                        : category === "Elective"
+                        ? "bg-purple-100 text-purple-700"
+                        : "bg-amber-100 text-amber-700"
+                    }`}
+                  >
+                    {category}
+                  </div>
+
+                  <div className="mt-2 text-xs font-semibold text-amber-700">
+                    Perlu Semakan
+                  </div>
                 </div>
               </div>
-
-              <div className="text-right">
-                <div
-                  className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                    cluster.category === "Core"
-                      ? "bg-emerald-100 text-emerald-700"
-                      : "bg-purple-100 text-purple-700"
-                  }`}
-                >
-                  {cluster.category}
-                </div>
-
-                <div className="mt-2 text-xs font-semibold">
-                  {cluster.approved ? (
-                    <span className="text-emerald-700">Diluluskan</span>
-                  ) : (
-                    <span className="text-amber-700">Perlu Semakan</span>
-                  )}
-                </div>
-              </div>
-            </div>
-          </button>
-        ))}
+            </button>
+          );
+        })}
       </div>
     </div>
   );

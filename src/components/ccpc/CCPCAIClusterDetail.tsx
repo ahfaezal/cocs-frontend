@@ -1,6 +1,17 @@
 "use client";
 
-import { AICluster } from "@/lib/ccpc-ai-types";
+type AICluster = {
+  id?: number | string;
+  clusterName?: string;
+  suggestedName?: string;
+  suggestedCategory?: string;
+  items?: string[];
+  cards?: {
+    id?: string | number;
+    text?: string;
+  }[];
+  notes?: string;
+};
 
 interface CCPCAIClusterDetailProps {
   cluster: AICluster | null;
@@ -17,6 +28,14 @@ export function CCPCAIClusterDetail({ cluster }: CCPCAIClusterDetailProps) {
       </div>
     );
   }
+
+  const clusterTitle =
+    cluster.clusterName ?? cluster.suggestedName ?? "Untitled Cluster";
+
+  const clusterItems =
+    cluster.items ??
+    cluster.cards?.map((card) => card.text ?? "").filter(Boolean) ??
+    [];
 
   const badgeClass =
     cluster.suggestedCategory === "Core Candidate"
@@ -37,8 +56,9 @@ export function CCPCAIClusterDetail({ cluster }: CCPCAIClusterDetailProps) {
             <label className="mb-2 block text-sm font-semibold text-slate-700">
               Nama Cluster
             </label>
-            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800">
-              {cluster.suggestedName}
+
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800">
+              {clusterTitle}
             </div>
           </div>
 
@@ -46,25 +66,38 @@ export function CCPCAIClusterDetail({ cluster }: CCPCAIClusterDetailProps) {
             <label className="mb-2 block text-sm font-semibold text-slate-700">
               Cadangan Kategori
             </label>
-            <div className={`inline-flex rounded-xl px-4 py-3 text-sm font-semibold ${badgeClass}`}>
-              {cluster.suggestedCategory}
+
+            <div
+              className={`inline-flex rounded-xl px-4 py-3 text-sm font-semibold ${badgeClass}`}
+            >
+              {cluster.suggestedCategory ?? "Review Required"}
             </div>
           </div>
         </div>
 
-        <div className="rounded-xl bg-blue-50 px-4 py-4 text-sm text-slate-700">
-          {cluster.notes || "AI telah menjana cluster ini berdasarkan persamaan maksud kad input."}
+        <div className="rounded-xl bg-blue-50 px-4 py-4 text-sm leading-6 text-slate-700">
+          {cluster.notes ||
+            "AI telah menjana cluster ini berdasarkan persamaan maksud kad input."}
         </div>
 
         <div>
-          <h4 className="mb-3 text-sm font-bold text-slate-800">Senarai Kad Dalam Cluster</h4>
+          <h4 className="mb-3 text-sm font-bold text-slate-800">
+            Senarai Kad Dalam Cluster
+          </h4>
+
           <div className="space-y-2">
-            {cluster.cards.map((card) => (
+            {clusterItems.length === 0 && (
+              <p className="rounded-xl border border-dashed border-slate-300 px-4 py-3 text-sm text-slate-400">
+                Tiada kad dalam cluster ini.
+              </p>
+            )}
+
+            {clusterItems.map((item, index) => (
               <div
-                key={card.id}
+                key={`${item}-${index}`}
                 className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700"
               >
-                {card.text}
+                {index + 1}. {item}
               </div>
             ))}
           </div>

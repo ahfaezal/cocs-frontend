@@ -1,76 +1,119 @@
-import { DacumCardItem } from "./dacum-card-item";
+"use client";
 
-const cards = [
-  { text: "Ganti imam tidak hadir", time: "14:41:48" },
-  { text: "Sedia jadual tugas bilal", time: "14:41:53" },
-  { text: "Kendali majlis ilmu khas", time: "14:41:58" },
-  { text: "Selaras tugasan jawatankuasa", time: "14:42:04" },
-  { text: "Simpan resit kewangan rasmi", time: "14:42:08" },
-  { text: "Laporkan kerosakan fasiliti masjid", time: "14:42:14" },
-  { text: "Sambut tetamu jemputan rasmi", time: "14:42:18" },
-  { text: "Kemas kini papan kenyataan", time: "14:42:23" },
+import { useEffect, useState } from "react";
 
-  { text: "Pantau perjalanan program masjid", time: "14:42:29" },
-  { text: "Laporkan insiden keselamatan masjid", time: "14:42:38" },
-  { text: "Selaras sukarelawan program masjid", time: "14:42:42" },
-  { text: "Sedia laporan aktiviti tahunan", time: "14:42:48" },
-  { text: "Simpan dokumentasi program masjid", time: "14:42:52" },
-  { text: "Selesai isu kariah setempat", time: "14:42:57" },
-  { text: "Semak keselamatan peralatan masjid", time: "14:43:02" },
-  { text: "Urus penyelenggaraan fasiliti masjid", time: "14:43:06" },
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
-  { text: "Sahkan baucar bayaran masjid", time: "14:43:10" },
-  { text: "Urus surat menyurat rasmi", time: "14:43:15" },
-  { text: "Sedia teks tazkirah ringkas", time: "14:43:20" },
-  { text: "Semak bacaan imam bertugas", time: "14:43:31" },
-  { text: "Semak sistem pembesar suara", time: "14:43:35" },
-  { text: "Hebah program dakwah masjid", time: "14:43:39" },
-  { text: "Kemas kini rekod pentadbiran", time: "14:43:42" },
-  { text: "Urus perbelanjaan operasi masjid", time: "14:43:47" },
+const SESSION_ID =
+  process.env.NEXT_PUBLIC_DEFAULT_SESSION_ID || "bricklaying-level-3";
 
-  { text: "Pantau sistem pendingin hawa", time: "14:43:51" },
-  { text: "Sedia peralatan program masjid", time: "14:43:58" },
-  { text: "Lafaz iqamah solat fardu", time: "14:44:19" },
-  { text: "Pimpin bacaan wirid jemaah", time: "14:44:23" },
-  { text: "Baca doa selepas solat", time: "14:44:33" },
-  { text: "Sampaikan khutbah Jumaat rasmi", time: "14:44:37" },
-  { text: "Laungkan azan waktu Maghrib", time: "14:44:42" },
-  { text: "Jemput penceramah jemputan luar", time: "14:44:44" },
-
-  { text: "Simpan fail dokumen masjid", time: "14:44:49" },
-  { text: "Semak baki akaun masjid", time: "14:44:52" },
-  { text: "Terima aduan jemaah masjid", time: "14:44:58" },
-  { text: "Atur program ceramah khas", time: "14:45:30" },
-  { text: "Imamkan solat sunat berjemaah", time: "14:45:34" },
-  { text: "Sedia laporan kewangan bulanan", time: "14:45:39" },
-  { text: "Urus maklumat ahli kariah", time: "14:45:44" },
-  {
-    text: "Rekod sumbangan derma harian",
-    time: "14:45:58",
-    isNew: true,
-    highlighted: true,
-  },
-];
+type CCPCCard = {
+  id: number;
+  session_id: string;
+  panel_name: string;
+  task_text: string;
+  status: string;
+  created_at: string;
+};
 
 export function DacumCardGrid() {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="grid grid-cols-1 gap-0 md:grid-cols-2 xl:grid-cols-4">
-        {cards.map((card, index) => (
-          <DacumCardItem
-            key={`${card.text}-${index}`}
-            text={card.text}
-            time={card.time}
-            isNew={card.isNew}
-            highlighted={card.highlighted}
-          />
-        ))}
-      </div>
+  const [cards, setCards] = useState<CCPCCard[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-      <div className="mt-4 text-sm text-slate-500">
-        Tip: Ini paparan “raw + timestamp” sebelum grouping. Clustering CU dibuat
-        selepas input panel mencukupi.
-      </div>
+  async function loadCards() {
+    try {
+      setError("");
+
+      const res = await fetch(`${API_URL}/ccpc/cards/${SESSION_ID}`, {
+        cache: "no-store",
+      });
+
+      if (!res.ok) {
+        throw new Error("Gagal mendapatkan senarai kad DACUM.");
+      }
+
+      const data = await res.json();
+      setCards(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Gagal load DACUM cards:", error);
+      setError("Sambungan ke backend gagal. Sila semak API server.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadCards();
+
+    const timer = setInterval(() => {
+      loadCards();
+    }, 3000);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  return (
+    <div className="space-y-4">
+      {loading && (
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-400 shadow-sm">
+          Memuatkan kad DACUM...
+        </div>
+      )}
+
+      {!loading && error && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-center text-sm font-medium text-red-600 shadow-sm">
+          {error}
+        </div>
+      )}
+
+      {!loading && !error && cards.length === 0 && (
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-400 shadow-sm">
+          Belum ada kad DACUM dihantar oleh panel.
+        </div>
+      )}
+
+      {!loading && !error && cards.length > 0 && (
+        <>
+          <div className="flex items-center justify-end gap-3">
+            <span className="rounded-full bg-emerald-100 px-4 py-1.5 text-xs font-semibold text-emerald-700">
+              {cards.length} Kad
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {cards.map((card, index) => (
+              <div
+                key={`${card.id}-${card.created_at}`}
+                className={`min-h-[110px] rounded-2xl border bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
+                  index === 0
+                    ? "border-emerald-400 ring-1 ring-emerald-300"
+                    : "border-slate-200"
+                }`}
+              >
+                <h3 className="text-base font-bold text-slate-950">
+                  {card.task_text}
+                </h3>
+
+                <p className="mt-6 text-xs font-medium text-slate-400">
+                  {new Date(card.created_at).toLocaleTimeString("en-MY", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                  })}
+                </p>
+
+                {index === 0 && (
+                  <span className="mt-3 inline-flex rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                    Kad Terbaru
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }

@@ -1,26 +1,117 @@
-const submissions = [
-  { name: "Panel 1", cards: 6, last: "10:12 AM" },
-  { name: "Panel 2", cards: 4, last: "10:10 AM" },
-  { name: "Panel 3", cards: 5, last: "10:14 AM" },
-  { name: "Panel 4", cards: 3, last: "10:07 AM" },
-  { name: "Panel 5", cards: 7, last: "10:15 AM" },
-];
+"use client";
+
+import { useEffect, useState } from "react";
+
+const API_URL = "http://127.0.0.1:8000";
+const SESSION_ID = "bricklaying-level-3";
+
+type CCPCCard = {
+  id: number;
+  session_id: string;
+  panel_name: string;
+  task_text: string;
+  status: string;
+  created_at: string;
+};
+
+type PanelSummary = {
+  name: string;
+  cards: number;
+  last: string;
+};
 
 export function PanelSubmissionList() {
+  const [items, setItems] = useState<PanelSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  async function loadData() {
+    try {
+      const res = await fetch(`${API_URL}/ccpc/cards/${SESSION_ID}`);
+      const data: CCPCCard[] = await res.json();
+
+      const grouped: Record<string, PanelSummary> = {};
+
+      data.forEach((card) => {
+        const name = card.panel_name || "Panel";
+
+        if (!grouped[name]) {
+          grouped[name] = {
+            name,
+            cards: 0,
+            last: card.created_at,
+          };
+        }
+
+        grouped[name].cards += 1;
+
+        if (card.created_at > grouped[name].last) {
+          grouped[name].last = card.created_at;
+        }
+      });
+
+      const result = Object.values(grouped).map((item) => ({
+        ...item,
+        last: new Date(item.last).toLocaleTimeString("en-MY", {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+      }));
+
+      setItems(result);
+    } catch (error) {
+      console.error("Gagal load panel summary:", error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadData();
+
+    const timer = setInterval(() => {
+      loadData();
+    }, 3000);
+
+    return () => clearInterval(timer);
+  }, []);
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="border-b border-slate-200 px-5 py-4">
-        <h2 className="text-lg font-bold text-blue-700">Ringkasan Input Panel</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold text-blue-700">
+            Ringkasan Input Panel
+          </h2>
+
+          <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+            Live Refresh
+          </span>
+        </div>
       </div>
 
       <div className="space-y-3 px-5 py-5">
-        {submissions.map((item) => (
+        {loading && (
+          <p className="text-sm text-slate-400">
+            Memuatkan data...
+          </p>
+        )}
+
+        {!loading && items.length === 0 && (
+          <p className="text-sm text-slate-400">
+            Tiada input panel lagi.
+          </p>
+        )}
+
+        {items.map((item) => (
           <div
             key={item.name}
             className="flex items-center justify-between rounded-xl border border-slate-200 px-4 py-3 hover:bg-slate-50"
           >
             <div>
-              <div className="font-semibold text-slate-900">{item.name}</div>
+              <div className="font-semibold text-slate-900">
+                {item.name}
+              </div>
+
               <div className="mt-1 text-sm text-slate-500">
                 Kad dihantar: {item.cards}
               </div>
@@ -30,7 +121,10 @@ export function PanelSubmissionList() {
               <div className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
                 Aktif
               </div>
-              <div className="mt-1 text-xs text-slate-500">{item.last}</div>
+
+              <div className="mt-1 text-xs text-slate-500">
+                {item.last}
+              </div>
             </div>
           </div>
         ))}

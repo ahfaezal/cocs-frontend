@@ -1,49 +1,113 @@
-import { Copy, RefreshCcw, QrCode, Smartphone } from "lucide-react";
+"use client";
+
+import { useEffect, useState } from "react";
+import QRCode from "react-qr-code";
+import { Check, Copy, RefreshCw, Smartphone } from "lucide-react";
+
+const SESSION_ID =
+  process.env.NEXT_PUBLIC_DEFAULT_SESSION_ID ||
+  "bricklaying-level-3";
 
 export function PanelQRCodeCard() {
+  const [panelUrl, setPanelUrl] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setPanelUrl(
+        `${window.location.origin}/panel-input/${SESSION_ID}`
+      );
+    }
+  }, []);
+
+  async function copyLink() {
+    try {
+      if (!panelUrl) return;
+
+      await navigator.clipboard.writeText(panelUrl);
+      setCopied(true);
+
+      setTimeout(() => {
+        setCopied(false);
+      }, 2000);
+    } catch (error) {
+      console.error("Gagal copy link:", error);
+      alert("Gagal menyalin link.");
+    }
+  }
+
+  function refreshQR() {
+    if (typeof window !== "undefined") {
+      setPanelUrl(
+        `${window.location.origin}/panel-input/${SESSION_ID}?t=${Date.now()}`
+      );
+    }
+  }
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="border-b border-slate-200 px-5 py-4">
-        <h2 className="text-lg font-bold text-blue-700">QR Code & Panel Input</h2>
+        <h2 className="text-lg font-bold text-blue-700">
+          QR Code & Panel Input
+        </h2>
+
+        <p className="mt-1 text-sm text-slate-500">
+          Ahli panel scan QR untuk hantar DACUM Card secara langsung.
+        </p>
       </div>
 
-      <div className="space-y-5 px-5 py-5">
-        <div className="flex justify-center">
-          <div className="flex h-48 w-48 items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 text-slate-400">
-            <div className="text-center">
-              <QrCode size={42} className="mx-auto" />
-              <div className="mt-3 text-sm font-medium">QR Code Session</div>
-            </div>
-          </div>
+      <div className="px-5 py-5">
+        <div className="mx-auto flex h-44 w-44 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-4">
+          {panelUrl ? (
+            <QRCode value={panelUrl} size={140} />
+          ) : (
+            <span className="text-xs text-slate-400">
+              Loading QR...
+            </span>
+          )}
         </div>
 
-        <div>
-          <div className="mb-2 text-sm font-semibold text-slate-700">
+        <div className="mt-5">
+          <label className="mb-2 block text-sm font-semibold text-slate-700">
             Link Panel Input
-          </div>
-          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-            https://cocs-cidb/panel-input/bricklaying-level-3
+          </label>
+
+          <input
+            value={panelUrl}
+            readOnly
+            className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-700"
+          />
+        </div>
+
+        <div className="mt-4 rounded-xl bg-blue-50 px-4 py-3 text-sm text-blue-700">
+          <div className="flex gap-2">
+            <Smartphone size={18} />
+            <span>
+              Panel hanya perlu scan QR ini menggunakan telefon.
+            </span>
           </div>
         </div>
 
-        <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-4">
-          <div className="flex items-start gap-3">
-            <Smartphone size={18} className="mt-0.5 text-blue-700" />
-            <p className="text-sm leading-6 text-slate-600">
-              Panel hanya perlu scan QR dan isi satu aktiviti kerja bagi setiap
-              kad. Semua maklumat projek telah disediakan oleh fasilitator.
-            </p>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap gap-3">
-          <button className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
-            <Copy size={16} />
-            Copy Link
+        <div className="mt-4 flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={copyLink}
+            className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition ${
+              copied
+                ? "bg-emerald-100 text-emerald-700"
+                : "border border-slate-200 text-slate-700 hover:bg-slate-50"
+            }`}
+          >
+            {copied ? <Check size={16} /> : <Copy size={16} />}
+            {copied ? "Berjaya Disalin" : "Copy Link"}
           </button>
 
-          <button className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
-            <RefreshCcw size={16} />
+          <button
+            type="button"
+            onClick={refreshQR}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            <RefreshCw size={16} />
             Refresh QR
           </button>
         </div>
