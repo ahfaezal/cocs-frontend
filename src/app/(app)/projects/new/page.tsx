@@ -53,28 +53,46 @@ export default function NewProjectPage() {
       setMessage("");
       setErrorMessage("");
 
+      const tahapNumber = Number(String(form.tahap).replace(/\D/g, "")) || 1;
+      const tahunNumber = Number(form.tahun) || new Date().getFullYear();
+
       const payload = {
-        title: form.tajukProjek,
-        project_title: form.tajukProjek,
+        title: form.tajukProjek.trim(),
+        project_title: form.tajukProjek.trim(),
+
         bidang: form.bidangTred,
         field: form.bidangTred,
+
         occupation: form.occupation,
-        level: form.tahap,
-        target_year: form.tahun,
+
+        level: tahapNumber,
+        tahap: tahapNumber,
+
+        target_year: tahunNumber,
+        tahun: tahunNumber,
+
         sector: form.sektor,
         subsector: form.subsektor,
         area: form.area,
+
         summary: form.ringkasan,
+        description: form.ringkasan,
+
         msic_code: form.msic,
         masco_code: form.masco,
         act_520_reference: form.akta520,
         standard_version: form.versiStandard,
+
         type: form.jenis,
-        status: "Draft",
+        jenis: form.jenis,
+
+        status: "draft",
         progress: 0,
       };
 
-      const res = await fetch(`${API_URL}/projects`, {
+      console.log("PROJECT PAYLOAD:", payload);
+
+      const res = await fetch(`${API_URL}/projects/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -82,11 +100,14 @@ export default function NewProjectPage() {
         body: JSON.stringify(payload),
       });
 
+      const responseText = await res.text();
+      console.log("PROJECT API RESPONSE:", responseText);
+
       if (!res.ok) {
-        throw new Error("Gagal menyimpan projek.");
+        throw new Error(responseText || "Gagal menyimpan projek.");
       }
 
-      const result = await res.json();
+      const result = responseText ? JSON.parse(responseText) : null;
 
       setMessage("Projek berjaya disimpan sebagai draf.");
 
