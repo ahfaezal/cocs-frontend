@@ -25,63 +25,67 @@ function CCPCPageContent() {
   const [viewMode, setViewMode] = useState<"builder" | "document">("builder");
   const [aiClusterResult, setAiClusterResult] =
     useState<AIClusterResult | null>(null);
-  const [selectedClusterId, setSelectedClusterId] =
-    useState<string | null>(null);
+  const [selectedClusterId, setSelectedClusterId] = useState<string | null>(
+    null
+  );
   const [isRunningClustering, setIsRunningClustering] = useState(false);
 
   const [projectList, setProjectList] = useState<any[]>([]);
-  const [selectedProjectId, setSelectedProjectId] =
-    useState(queryProjectId);
+  const [selectedProjectId, setSelectedProjectId] = useState(queryProjectId);
 
   const [projectInfo, setProjectInfo] = useState({
     title: "Bricklayer (Wet Trade) Level 3",
-    code: "COCS/2024/001",
+    code: "COCS/2026/001",
     bidang: "Bricklaying (Wet Trade)",
     tahap: "3",
-    status: "Dalam Pembangunan",
-    laluanKerjaya: "Kerja Batu dan Konkrit",
+    status: "draft",
+    laluanKerjaya: "Architectural",
   });
 
   const clusters = aiClusterResult?.clusters ?? [];
 
   useEffect(() => {
-  async function loadProjects() {
-    try {
-      const res = await fetch(`${API_URL}/projects`, {
-        cache: "no-store",
-      });
+    async function loadProjects() {
+      try {
+        const res = await fetch(`${API_URL}/projects`, {
+          cache: "no-store",
+        });
 
-      if (!res.ok) return;
+        if (!res.ok) {
+          console.error("Gagal load projects:", await res.text());
+          return;
+        }
 
-      const data = await res.json();
-      const list = Array.isArray(data) ? data : data.projects || [];
+        const data = await res.json();
+        const list = Array.isArray(data) ? data : data.projects || [];
 
-      setProjectList(list);
+        setProjectList(list);
 
-      if (!selectedProjectId && list.length > 0) {
-        setSelectedProjectId(String(list[0].id));
+        if (!selectedProjectId && list.length > 0) {
+          const latestProject = list[list.length - 1];
+          setSelectedProjectId(String(latestProject.id));
+        }
+      } catch (error) {
+        console.error("Gagal load senarai projek:", error);
       }
-    } catch (error) {
-      console.error("Gagal load projek:", error);
     }
-  }
 
-  loadProjects();
-}, []);
+    loadProjects();
+  }, []);
 
   useEffect(() => {
     async function loadProject() {
       if (!selectedProjectId) return;
 
       try {
-        const res = await fetch(
-          `${API_URL}/projects/${selectedProjectId}`,
-          {
-            cache: "no-store",
-          }
-        );
+        const res = await fetch(`${API_URL}/projects/${selectedProjectId}`, {
+          cache: "no-store",
+        });
 
-        if (!res.ok) return;
+        if (!res.ok) {
+          console.error("Gagal load project:", await res.text());
+          return;
+        }
 
         const data = await res.json();
 
@@ -90,13 +94,9 @@ function CCPCPageContent() {
           code: data.project_code || data.code || `COCS/${data.id}`,
           bidang: data.field || data.bidang || data.sector || "-",
           tahap: String(data.level || data.tahap || "-"),
-          status: data.status || "Dalam Pembangunan",
+          status: data.status || "draft",
           laluanKerjaya:
-            data.occupation ||
-            data.trade ||
-            data.area ||
-            data.field ||
-            "-",
+            data.occupation || data.trade || data.area || data.field || "-",
         });
       } catch (error) {
         console.error("Gagal load project:", error);
@@ -120,7 +120,7 @@ function CCPCPageContent() {
         }),
       });
 
-      if (!res.ok) throw new Error();
+      if (!res.ok) throw new Error("AI clustering gagal.");
 
       const result = await res.json();
       const generatedClusters = result.clusters || [];
@@ -134,9 +134,7 @@ function CCPCPageContent() {
         status: "ready",
       });
 
-      setSelectedClusterId(
-        String(generatedClusters?.[0]?.id || "")
-      );
+      setSelectedClusterId(String(generatedClusters?.[0]?.id || ""));
     } catch (error) {
       console.error(error);
       alert("Gagal menjalankan AI clustering.");
@@ -144,6 +142,11 @@ function CCPCPageContent() {
       setIsRunningClustering(false);
     }
   }
+
+  const sessionName = projectInfo.title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
 
   return (
     <div className="space-y-6">
@@ -176,35 +179,54 @@ function CCPCPageContent() {
 
         <select
           value={selectedProjectId}
-          onChange={(e) =>
-            setSelectedProjectId(e.target.value)
-          }
-          className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
+          onChange={(e) => setSelectedProjectId(e.target.value)}
+          className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
         >
           <option value="">Sila pilih projek</option>
 
           {projectList.map((item) => (
-            <option key={item.id} value={item.id}>
-              {(item.project_code ||
-                item.code ||
-                `COCS/${item.id}`) +
+            <option key={item.id} value={String(item.id)}>
+              {(item.project_code || item.code || `COCS/${item.id}`) +
                 " – " +
-                (item.project_title ||
-                  item.title ||
-                  "Untitled Project")}
+                (item.project_title || item.title || "Untitled Project")}
             </option>
           ))}
         </select>
+
+        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {projectList.map((item) => {
+            const code = item.project_code || item.code || `COCS/${item.id}`;
+            const title =
+              item.project_title || item.title || "Untitled Project";
+            const isActive = String(selectedProjectId) === String(item.id);
+
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setSelectedProjectId(String(item.id))}
+                className={`rounded-xl border px-4 py-3 text-left text-sm transition ${
+                  isActive
+                    ? "border-blue-600 bg-blue-50 text-blue-700"
+                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                }`}
+              >
+                <div className="font-semibold">{code}</div>
+                <div className="mt-1 text-xs">{title}</div>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="rounded-2xl bg-blue-100 p-2 text-blue-700">
             <Info size={20} />
           </div>
 
           <div>
-            <h1 className="text-4xl font-bold text-slate-900">
+            <h1 className="text-4xl font-bold tracking-tight text-slate-900">
               Competency Analysis (CCPC)
             </h1>
 
@@ -216,22 +238,24 @@ function CCPCPageContent() {
 
         <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
           <button
+            type="button"
             onClick={() => setViewMode("builder")}
             className={`rounded-lg px-5 py-2 text-sm font-semibold ${
               viewMode === "builder"
                 ? "bg-blue-600 text-white"
-                : "text-slate-600"
+                : "text-slate-600 hover:bg-slate-50"
             }`}
           >
             Builder Mode
           </button>
 
           <button
+            type="button"
             onClick={() => setViewMode("document")}
             className={`rounded-lg px-5 py-2 text-sm font-semibold ${
               viewMode === "document"
                 ? "bg-blue-600 text-white"
-                : "text-slate-600"
+                : "text-slate-600 hover:bg-slate-50"
             }`}
           >
             Document Mode
@@ -247,7 +271,7 @@ function CCPCPageContent() {
 
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.1fr_0.9fr]">
             <DacumSessionCard
-              sessionName={projectInfo.title.toLowerCase().replaceAll(" ", "-")}
+              sessionName={sessionName}
               standardTitle={projectInfo.title}
             />
             <PanelQRCodeCard />
@@ -270,13 +294,12 @@ function CCPCPageContent() {
               </div>
 
               <button
+                type="button"
                 onClick={handleRunAIClustering}
                 disabled={isRunningClustering}
                 className="rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
               >
-                {isRunningClustering
-                  ? "Running AI..."
-                  : "Run AI Clustering"}
+                {isRunningClustering ? "Running AI..." : "Run AI Clustering"}
               </button>
             </div>
 
