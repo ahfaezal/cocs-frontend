@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 
 import { PageHeader } from "@/components/shared/page-header";
+import { getAuthToken } from "@/lib/auth";
 import { API_URL } from "@/lib/env";
 import { hasPermission, ROLE_LABELS, type UserRole } from "@/lib/permissions";
 import { useCurrentUser } from "@/lib/use-current-user";
@@ -89,8 +90,13 @@ export default function UsersPage() {
   }, [search, users]);
 
   async function loadProjects() {
+    const token = getAuthToken();
+
     const res = await fetch(`${API_URL}/projects/`, {
       cache: "no-store",
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
     });
 
     if (!res.ok) {
@@ -114,9 +120,20 @@ export default function UsersPage() {
       setLoadingUsers(true);
       setErrorMessage("");
 
+      const token = getAuthToken();
+      const authHeaders = {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
+
       const [usersRes, assignmentsRes] = await Promise.all([
-        fetch(`${API_URL}/users/`, { cache: "no-store" }),
-        fetch(`${API_URL}/project-assignments/`, { cache: "no-store" }),
+        fetch(`${API_URL}/users/`, {
+          cache: "no-store",
+          headers: authHeaders,
+        }),
+        fetch(`${API_URL}/project-assignments/`, {
+          cache: "no-store",
+          headers: authHeaders,
+        }),
       ]);
 
       if (!usersRes.ok) {
@@ -187,9 +204,13 @@ export default function UsersPage() {
   }, [canManageUsers]);
 
   useEffect(() => {
-    if (canManageUsers) {
+    if (!canManageUsers) return;
+
+    const timer = window.setTimeout(() => {
       loadUsers();
-    }
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [canManageUsers, projects]);
 
   function updateForm(name: keyof typeof form, value: string) {
@@ -224,10 +245,13 @@ export default function UsersPage() {
     try {
       setErrorMessage("");
 
+      const token = getAuthToken();
+
       const userRes = await fetch(`${API_URL}/users/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
           name: form.name.trim(),
@@ -258,6 +282,7 @@ export default function UsersPage() {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
           body: JSON.stringify({
             project_id: Number(form.assignedProjectId),
@@ -308,10 +333,13 @@ export default function UsersPage() {
       user.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
 
     try {
+      const token = getAuthToken();
+
       const res = await fetch(`${API_URL}/users/${userId}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
           status: nextStatus,
