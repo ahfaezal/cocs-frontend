@@ -380,6 +380,11 @@ function CCPCPageContent() {
       if (!res.ok) throw new Error("AI clustering gagal.");
 
       const result = await res.json();
+
+      if (result.success === false) {
+        throw new Error(result.message || "AI clustering gagal.");
+      }
+
       const generatedClusters = result.clusters || [];
 
       const nextResult: AIClusterResult = {
@@ -395,7 +400,11 @@ function CCPCPageContent() {
       setSelectedClusterId(String(generatedClusters?.[0]?.id || ""));
     } catch (error) {
       console.error(error);
-      alert("Gagal menjalankan AI clustering.");
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Gagal menjalankan AI clustering."
+      );
     } finally {
       setIsRunningClustering(false);
     }

@@ -89,6 +89,37 @@ function lowerFirst(value: string) {
   return clean.charAt(0).toLowerCase() + clean.slice(1);
 }
 
+function stripNumbering(value: string) {
+  return cleanText(value).replace(/^\d+\.\d+\s*/, "");
+}
+
+function withNumbering(values: string[], unitSequence = 1) {
+  return values.map((value, index) => {
+    const clean = cleanText(value);
+    if (/^\d+\.\d+\s/.test(clean)) return clean;
+    return `${unitSequence}.${index + 1} ${clean}`;
+  });
+}
+
+function isValidWorkStep(value: string) {
+  const step = stripNumbering(value).toLowerCase();
+
+  if (!step) return false;
+
+  return ![
+    " according to ",
+    " in accordance with ",
+    " based on ",
+    " as specified ",
+    " in compliance with ",
+    " to ensure ",
+    " to confirm ",
+    " to identify ",
+    " for ",
+    " in ",
+  ].some((phrase) => ` ${step} `.includes(phrase));
+}
+
 function buildDescriptor(
   body: CCPGenerateRequest,
   aiResult: DescriptorAIResult
@@ -136,17 +167,20 @@ function buildFallback(body: CCPGenerateRequest): CCPGenerateResult {
     };
   }
 
-  return {
-    descriptor: "",
-    workSteps: [
-      `Interpret work instruction for ${unit.toLowerCase()}`,
-      `Prepare tools, equipment and materials for ${unit.toLowerCase()}`,
-      `Apply safety control measures before performing ${unit.toLowerCase()}`,
-      `Carry out ${unit.toLowerCase()} according to approved procedure`,
-      `Inspect completed work against specified requirement`,
-      `Record ${unit.toLowerCase()} result in maintenance documentation`,
+  const unitSequence = body.unitSequence || 1;
+  const workSteps = withNumbering(
+    [
+      `Interpret ${unit.toLowerCase()} requirement`,
+      `Prepare required tools and materials`,
+      `Apply safety control measures`,
+      `Perform ${unit.toLowerCase()} activity`,
+      `Inspect completed work quality`,
+      `Record ${unit.toLowerCase()} result`,
     ],
-    performanceCriteria: [
+    unitSequence
+  );
+  const performanceCriteria = withNumbering(
+    [
       "Work instruction was interpreted according to approved maintenance document and task requirement.",
       "Tools, equipment and materials were prepared based on the work activity requirement.",
       "Safety control measures were applied in accordance with railway safety procedure.",
@@ -154,11 +188,21 @@ function buildFallback(body: CCPGenerateRequest): CCPGenerateResult {
       "Completed work was inspected based on specified acceptance criteria.",
       "Work result was recorded in accordance with maintenance documentation requirement.",
     ],
+    unitSequence
+  );
+
+  return {
+    descriptor: "",
+    workSteps,
+    performanceCriteria,
     generatedAt: new Date().toISOString(),
   };
 }
 
-function parseUnitResult(text: string): CCPGenerateResult | null {
+function parseUnitResult(
+  text: string,
+  body: CCPGenerateRequest
+): CCPGenerateResult | null {
   try {
     const parsed = JSON.parse(text) as Partial<CCPGenerateResult>;
 
@@ -170,11 +214,18 @@ function parseUnitResult(text: string): CCPGenerateResult | null {
       ? parsed.performanceCriteria.map(cleanText).filter(Boolean)
       : [];
 
-    if (workSteps.length >= 5 && performanceCriteria.length >= workSteps.length) {
+    if (
+      workSteps.length >= 5 &&
+      performanceCriteria.length >= workSteps.length &&
+      workSteps.every(isValidWorkStep)
+    ) {
       return {
         descriptor: "",
-        workSteps,
-        performanceCriteria: performanceCriteria.slice(0, workSteps.length),
+        workSteps: withNumbering(workSteps, body.unitSequence || 1),
+        performanceCriteria: withNumbering(
+          performanceCriteria.slice(0, workSteps.length),
+          body.unitSequence || 1
+        ),
         generatedAt: new Date().toISOString(),
       };
     }
@@ -249,18 +300,21 @@ Generate ONLY Work Steps and Performance Criteria for the selected Competency Un
 
 Rules for WORK STEP:
 - Work Step must be short and direct.
+- Work Step must use Verb + Object + Qualifier only.
 - Work Step must describe only the action to be performed.
+- Work Step must be 3 to 7 words after the numbering.
 - Do not include long purpose statements in Work Step.
-- Do not include detailed standards, compliance statements, or acceptance criteria in Work Step.
+- Do not include detailed standards, compliance statements, acceptance criteria, tools, methods, locations, or reasons in Work Step.
+- Do not use these phrases in Work Step: "according to", "in accordance with", "based on", "as specified", "in compliance with", "to ensure", "to confirm", "to identify", "for", "in".
 - Generate not less than 5 Work Steps.
 - Each Work Step must begin with an action verb.
 - Every Work Step must start with numbering using this format: ${body.unitSequence || 1}.1, ${body.unitSequence || 1}.2, ${body.unitSequence || 1}.3 and so on.
 - Good examples:
-  "${body.unitSequence || 1}.1 Inspect the track alignment visually."
-  "${body.unitSequence || 1}.2 Measure the track gauge using appropriate measuring tools."
-  "${body.unitSequence || 1}.3 Document any discrepancies found during the inspection."
-  "${body.unitSequence || 1}.4 Report the findings to the supervisor."
-  "${body.unitSequence || 1}.5 Conduct follow-up inspections after maintenance work."
+  "${body.unitSequence || 1}.1 Inspect equipment condition."
+  "${body.unitSequence || 1}.2 Prepare testing tools."
+  "${body.unitSequence || 1}.3 Conduct equipment testing."
+  "${body.unitSequence || 1}.4 Record performance readings."
+  "${body.unitSequence || 1}.5 Report equipment defects."
 
 Rules for PERFORMANCE CRITERIA:
 - Generate exactly one Performance Criteria for each Work Step.
@@ -351,7 +405,7 @@ export async function POST(req: NextRequest) {
     const parsed =
       scope === "descriptor"
         ? parseDescriptorResult(extracted, body)
-        : parseUnitResult(extracted);
+        : parseUnitResult(extracted, body);
 
     return NextResponse.json(parsed || buildFallback(body));
   } catch (error) {
