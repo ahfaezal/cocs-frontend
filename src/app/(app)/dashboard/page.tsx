@@ -16,7 +16,10 @@ import { StatCard } from "@/components/shared/stat-card";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { ProgressBar } from "@/components/shared/progress-bar";
 import { API_URL } from "@/lib/env";
+import { hasPermission } from "@/lib/permissions";
+import { useCurrentUser } from "@/lib/use-current-user";
 import type { ProjectStatus } from "@/types/project";
+import { getAuthToken } from "@/lib/auth";
 
 type ProjectItem = {
   id: number | string;
@@ -66,14 +69,21 @@ export default function DashboardPage() {
   );
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
+  const currentUser = useCurrentUser();
 
   async function loadProjects() {
     try {
       setErrorMessage("");
 
-      const res = await fetch(`${API_URL}/projects`, {
+      const token = getAuthToken();
+
+      const res = await fetch(`${API_URL}/projects/`, {
         cache: "no-store",
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
       });
+
 
       if (!res.ok) {
         throw new Error("Gagal mendapatkan senarai projek.");
@@ -93,8 +103,10 @@ export default function DashboardPage() {
   }
 
   useEffect(() => {
+    if (!currentUser.id) return;
+
     loadProjects();
-  }, []);
+  }, [currentUser.id, currentUser.role]);
 
   const totalProjects = projects.length;
 
@@ -111,11 +123,12 @@ export default function DashboardPage() {
   ).length;
 
   const recentProjects = projects.slice(0, 5);
+  const canCreateProject = hasPermission(currentUser.role, "project:create");
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Selamat datang, Fasilitator Utama"
+        title={`Selamat datang, ${currentUser.name}`}
         description="Berikut ialah ringkasan aktiviti pembangunan COCS anda."
         icon={<LayoutDashboard size={20} />}
         breadcrumb={
@@ -133,12 +146,14 @@ export default function DashboardPage() {
               Lihat Semua Projek
             </Link>
 
-            <Link
-              href="/projects/new"
-              className="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white transition hover:bg-blue-700"
-            >
-              + Projek Baru
-            </Link>
+            {canCreateProject ? (
+              <Link
+                href="/projects/new"
+                className="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white transition hover:bg-blue-700"
+              >
+                + Projek Baru
+              </Link>
+            ) : null}
           </div>
         }
       />
@@ -295,9 +310,7 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex items-center justify-between px-6 py-4 text-sm text-slate-500">
-          <span>
-            Menunjukkan {recentProjects.length} projek terkini.
-          </span>
+          <span>Menunjukkan {recentProjects.length} projek terkini.</span>
 
           <Link
             href="/projects"

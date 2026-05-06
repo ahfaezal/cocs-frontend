@@ -10,15 +10,21 @@ import {
   Archive,
   Blocks,
   GraduationCap,
+  type LucideIcon,
 } from "lucide-react";
 
 type StatusConfig = {
   label: string;
   className: string;
-  icon: any;
+  icon: LucideIcon;
 };
 
 const statusMap: Record<ProjectStatus, StatusConfig> = {
+  draft: {
+    label: "draft",
+    className: "bg-gray-100 text-gray-700",
+    icon: FileText,
+  },
   Draft: {
     label: "Draft",
     className: "bg-gray-100 text-gray-700",
@@ -100,3 +106,6 @@ export function StatusBadge({
     </span>
   );
 }
+
+
+

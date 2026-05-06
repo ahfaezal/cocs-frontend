@@ -1,5 +1,15 @@
 "use client";
 
+type CCPCClusterCard =
+  | string
+  | {
+      title?: string;
+      task?: string;
+      name?: string;
+      text?: string;
+      description?: string;
+    };
+
 type CCPCCluster = {
   id: string | number;
   clusterName?: string;
@@ -7,11 +17,17 @@ type CCPCCluster = {
   suggestedCategory?: string;
   finalised?: boolean;
   items?: string[];
-  cards?: any[];
+  cards?: CCPCClusterCard[];
 };
 
 type CCPCDocumentModeProps = {
   clusters: CCPCCluster[];
+  section?: string;
+  group?: string;
+  area?: string;
+  cocsTitle?: string;
+  cocsLevel?: string;
+  cocsCode?: string;
 };
 
 function getClusterName(cluster: CCPCCluster, index: number) {
@@ -26,20 +42,42 @@ function getClusterCode(index: number) {
   return `CC${String(index + 1).padStart(2, "0")}`;
 }
 
+const LEVEL_LABELS: Record<string, string> = {
+  "1": "ONE (1)",
+  "2": "TWO (2)",
+  "3": "THREE (3)",
+  "4": "FOUR (4)",
+  "5": "FIVE (5)",
+  "6": "SIX (6)",
+};
+
+function formatLevel(level?: string) {
+  const normalized = String(level || "").replace(/\D/g, "");
+  return LEVEL_LABELS[normalized] || level || "-";
+}
+
 function getItems(cluster: CCPCCluster) {
   if (cluster.items && cluster.items.length > 0) return cluster.items;
 
   if (cluster.cards && cluster.cards.length > 0) {
     return cluster.cards.map((card) => {
       if (typeof card === "string") return card;
-      return card.title || card.task || card.name || card.description || "";
+      return card.title || card.task || card.name || card.text || card.description || "";
     });
   }
 
   return [];
 }
 
-export function CCPCDocumentMode({ clusters }: CCPCDocumentModeProps) {
+export function CCPCDocumentMode({
+  clusters,
+  section = "-",
+  group = "-",
+  area = "-",
+  cocsTitle = "-",
+  cocsLevel = "-",
+  cocsCode = "",
+}: CCPCDocumentModeProps) {
   const finalClusters =
     clusters.filter((cluster) => cluster.finalised).length > 0
       ? clusters.filter((cluster) => cluster.finalised)
@@ -59,7 +97,7 @@ export function CCPCDocumentMode({ clusters }: CCPCDocumentModeProps) {
                 SECTION
               </td>
               <td className="border border-black px-3 py-2" colSpan={3}>
-                (F) CONSTRUCTION
+                {section}
               </td>
             </tr>
             <tr>
@@ -67,7 +105,7 @@ export function CCPCDocumentMode({ clusters }: CCPCDocumentModeProps) {
                 GROUP
               </td>
               <td className="border border-black px-3 py-2" colSpan={3}>
-                (302) MANUFACTURE OF RAILWAY AND ROLLING STOCK
+                {group}
               </td>
             </tr>
             <tr>
@@ -75,7 +113,7 @@ export function CCPCDocumentMode({ clusters }: CCPCDocumentModeProps) {
                 AREA
               </td>
               <td className="border border-black px-3 py-2" colSpan={3}>
-                PERMANENT WAY (TRACKWORK)
+                {area}
               </td>
             </tr>
             <tr>
@@ -83,31 +121,31 @@ export function CCPCDocumentMode({ clusters }: CCPCDocumentModeProps) {
                 COCS TITLE
               </td>
               <td className="border border-black px-3 py-2" colSpan={3}>
-                RAILWAY
+                {cocsTitle}
               </td>
             </tr>
             <tr>
               <td className="border border-black bg-[#d9d9d9] px-3 py-2">
                 COCS LEVEL
               </td>
-              <td className="border border-black px-3 py-2">ONE (1)</td>
+              <td className="border border-black px-3 py-2">{formatLevel(cocsLevel)}</td>
               <td className="w-[150px] border border-black bg-[#d9d9d9] px-3 py-2">
                 COCS CODE
               </td>
-              <td className="border border-black px-3 py-2"></td>
+              <td className="border border-black px-3 py-2">{cocsCode}</td>
             </tr>
           </tbody>
         </table>
 
         <div className="mb-4 grid grid-cols-[210px_1fr] gap-5">
           <div className="border border-black bg-[#d9d9d9] py-2 text-center">
-            ↔CORE
+            CORE
             <br />
-            COMPETENCY↔
+            COMPETENCY
           </div>
 
           <div className="border border-black bg-[#d9d9d9] py-2 text-center">
-            ↔COMPETENCY UNIT↔
+            COMPETENCY UNIT
           </div>
         </div>
 

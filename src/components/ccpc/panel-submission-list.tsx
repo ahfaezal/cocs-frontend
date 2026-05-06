@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { API_URL, DEFAULT_SESSION_ID } from "@/lib/env";
+import { API_URL } from "@/lib/env";
 
 type CCPCCard = {
   id: number;
@@ -18,77 +18,98 @@ type PanelSummary = {
   last: string;
 };
 
-export function PanelSubmissionList() {
+type PanelSubmissionListProps = {
+  sessionId: string;
+  sessionActive?: boolean;
+};
+
+export function PanelSubmissionList({
+  sessionId,
+  sessionActive = false,
+}: PanelSubmissionListProps) {
   const [items, setItems] = useState<PanelSummary[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
-  async function loadData() {
-    try {
-      setErrorMessage("");
-
-      const res = await fetch(
-        `${API_URL}/ccpc/cards/${DEFAULT_SESSION_ID}`,
-        {
-          cache: "no-store",
-        }
-      );
-
-      if (!res.ok) {
-        throw new Error("Gagal mendapatkan data panel.");
-      }
-
-      const data: CCPCCard[] = await res.json();
-
-      const grouped: Record<string, PanelSummary> = {};
-
-      data.forEach((card) => {
-        const name = card.panel_name?.trim() || "Panel";
-
-        if (!grouped[name]) {
-          grouped[name] = {
-            name,
-            cards: 0,
-            last: card.created_at,
-          };
-        }
-
-        grouped[name].cards += 1;
-
-        if (card.created_at > grouped[name].last) {
-          grouped[name].last = card.created_at;
-        }
-      });
-
-      const result = Object.values(grouped)
-        .map((item) => ({
-          ...item,
-          last: new Date(item.last).toLocaleTimeString("en-MY", {
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
-        }))
-        .sort((a, b) => b.cards - a.cards);
-
-      setItems(result);
-    } catch (error) {
-      console.error("Gagal load panel summary:", error);
-      setErrorMessage("Sambungan ke backend gagal. Sila semak API server.");
-      setItems([]);
-    } finally {
-      setLoading(false);
-    }
-  }
-
   useEffect(() => {
+    if (!sessionActive || !sessionId) return;
+
+    let cancelled = false;
+
+    async function loadData() {
+      try {
+        setLoading(true);
+        setErrorMessage("");
+
+        const res = await fetch(`${API_URL}/ccpc/cards/${sessionId}`, {
+          cache: "no-store",
+        });
+
+        if (!res.ok) {
+          throw new Error("Gagal mendapatkan data panel.");
+        }
+
+        const data: CCPCCard[] = await res.json();
+        const grouped: Record<string, PanelSummary> = {};
+
+        data.forEach((card) => {
+          const name = card.panel_name?.trim() || "Panel";
+
+          if (!grouped[name]) {
+            grouped[name] = {
+              name,
+              cards: 0,
+              last: card.created_at,
+            };
+          }
+
+          grouped[name].cards += 1;
+
+          if (card.created_at > grouped[name].last) {
+            grouped[name].last = card.created_at;
+          }
+        });
+
+        const result = Object.values(grouped)
+          .map((item) => ({
+            ...item,
+            last: new Date(item.last).toLocaleTimeString("en-MY", {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+          }))
+          .sort((a, b) => b.cards - a.cards);
+
+        if (!cancelled) {
+          setItems(result);
+        }
+      } catch (error) {
+        console.error("Gagal load panel summary:", error);
+
+        if (!cancelled) {
+          setErrorMessage("Sambungan ke backend gagal. Sila semak API server.");
+          setItems([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
     loadData();
 
-    const timer = setInterval(() => {
-      loadData();
-    }, 3000);
+    const timer = setInterval(loadData, 3000);
 
-    return () => clearInterval(timer);
-  }, []);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [sessionActive, sessionId]);
+
+  if (!sessionActive || (!loading && !errorMessage && items.length === 0)) {
+    return null;
+  }
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -123,12 +144,6 @@ export function PanelSubmissionList() {
           </div>
         )}
 
-        {!loading && !errorMessage && items.length === 0 && (
-          <div className="rounded-xl border border-dashed border-slate-300 p-4 text-sm text-slate-400">
-            Tiada input panel lagi.
-          </div>
-        )}
-
         {!loading &&
           !errorMessage &&
           items.map((item) => (
@@ -151,9 +166,7 @@ export function PanelSubmissionList() {
                   Aktif
                 </div>
 
-                <div className="mt-1 text-xs text-slate-500">
-                  {item.last}
-                </div>
+                <div className="mt-1 text-xs text-slate-500">{item.last}</div>
               </div>
             </div>
           ))}

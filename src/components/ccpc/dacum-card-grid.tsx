@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { API_URL, DEFAULT_SESSION_ID } from "@/lib/env";
+import { API_URL } from "@/lib/env";
 
 type CCPCCard = {
   id: number;
@@ -12,42 +12,69 @@ type CCPCCard = {
   created_at: string;
 };
 
-export function DacumCardGrid() {
+type DacumCardGridProps = {
+  sessionId: string;
+  sessionActive?: boolean;
+};
+
+export function DacumCardGrid({
+  sessionId,
+  sessionActive = false,
+}: DacumCardGridProps) {
   const [cards, setCards] = useState<CCPCCard[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  async function loadCards() {
-    try {
-      setError("");
-
-      const res = await fetch(`${API_URL}/ccpc/cards/${DEFAULT_SESSION_ID}`, {
-        cache: "no-store",
-      });
-
-      if (!res.ok) {
-        throw new Error("Gagal mendapatkan senarai kad DACUM.");
-      }
-
-      const data = await res.json();
-      setCards(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error("Gagal load DACUM cards:", error);
-      setError("Sambungan ke backend gagal. Sila semak API server.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
   useEffect(() => {
+    if (!sessionActive || !sessionId) return;
+
+    let cancelled = false;
+
+    async function loadCards() {
+      try {
+        setLoading(true);
+        setError("");
+
+        const res = await fetch(`${API_URL}/ccpc/cards/${sessionId}`, {
+          cache: "no-store",
+        });
+
+        if (!res.ok) {
+          throw new Error("Gagal mendapatkan senarai kad DACUM.");
+        }
+
+        const data = await res.json();
+
+        if (!cancelled) {
+          setCards(Array.isArray(data) ? data : []);
+        }
+      } catch (error) {
+        console.error("Gagal load DACUM cards:", error);
+
+        if (!cancelled) {
+          setError("Sambungan ke backend gagal. Sila semak API server.");
+          setCards([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
     loadCards();
 
-    const timer = setInterval(() => {
-      loadCards();
-    }, 3000);
+    const timer = setInterval(loadCards, 3000);
 
-    return () => clearInterval(timer);
-  }, []);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [sessionActive, sessionId]);
+
+  if (!sessionActive || (!loading && !error && cards.length === 0)) {
+    return null;
+  }
 
   return (
     <div className="space-y-4">
@@ -60,12 +87,6 @@ export function DacumCardGrid() {
       {!loading && error && (
         <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-center text-sm font-medium text-red-600 shadow-sm">
           {error}
-        </div>
-      )}
-
-      {!loading && !error && cards.length === 0 && (
-        <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-400 shadow-sm">
-          Belum ada kad DACUM dihantar oleh panel.
         </div>
       )}
 

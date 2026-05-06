@@ -1,9 +1,25 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { ExternalLink } from "lucide-react";
 
-export function LiveBoardToolbar() {
+type LiveBoardToolbarProps = {
+  readOnly?: boolean;
+  sessionId: string;
+  projectId?: string;
+};
+
+export function LiveBoardToolbar({
+  readOnly = false,
+  sessionId,
+  projectId,
+}: LiveBoardToolbarProps) {
+  const liveBoardHref = projectId
+    ? `/ccpc/live-board?sessionId=${encodeURIComponent(
+        sessionId
+      )}&projectId=${encodeURIComponent(projectId)}`
+    : `/ccpc/live-board?sessionId=${encodeURIComponent(sessionId)}`;
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -20,18 +36,26 @@ export function LiveBoardToolbar() {
             <span className="rounded-full bg-emerald-100 px-3 py-1 font-medium text-emerald-700">
               Live Active
             </span>
+
+            {readOnly ? (
+              <span className="rounded-full bg-blue-100 px-3 py-1 font-medium text-blue-700">
+                Mode Semakan
+              </span>
+            ) : null}
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <Link
-            href="/ccpc/live-board"
-            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
-          >
-            <ExternalLink size={16} />
-            Buka Live Board
-          </Link>
-        </div>
+        {!readOnly ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <Link
+              href={liveBoardHref}
+              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
+            >
+              <ExternalLink size={16} />
+              Buka Live Board
+            </Link>
+          </div>
+        ) : null}
       </div>
     </div>
   );

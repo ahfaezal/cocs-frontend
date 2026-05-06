@@ -1,15 +1,25 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Plus, Save, CheckCircle2, Trash2, ArrowRight } from "lucide-react";
+import type {
+  AICluster as BaseAICluster,
+  ClusterSuggestionCategory,
+  DACUMCard,
+} from "@/lib/ccpc-ai-types";
+import {
+  ArrowRight,
+  CheckCircle2,
+  Pencil,
+  Plus,
+  Save,
+  Trash2,
+} from "lucide-react";
 
-type AICluster = {
-  id: number | string;
+type AICluster = BaseAICluster & {
   clusterName?: string;
-  suggestedName?: string;
   items?: string[];
-  cards?: any[];
-  notes?: string;
+  finalised?: boolean;
 };
 
 type EditableCluster = {
@@ -17,18 +27,36 @@ type EditableCluster = {
   name: string;
   items: string[];
   finalised: boolean;
+  source?: AICluster;
 };
 
 interface CCPCAIClusterListProps {
   clusters: AICluster[];
   selectedClusterId: string | null;
   onSelect: (clusterId: string) => void;
+  readOnly?: boolean;
+  proceedHref?: string;
+  onClustersChange?: (clusters: AICluster[]) => void;
+}
+
+function normaliseClusterItems(cluster: AICluster): string[] {
+  const rawItems: Array<string | DACUMCard> = cluster.items ?? cluster.cards ?? [];
+
+  return rawItems
+    .map((item) => {
+      if (typeof item === "string") return item;
+      return item.text ?? "";
+    })
+    .filter((item) => item.trim().length > 0);
 }
 
 export function CCPCAIClusterList({
   clusters,
   selectedClusterId,
   onSelect,
+  readOnly = false,
+  proceedHref,
+  onClustersChange,
 }: CCPCAIClusterListProps) {
   const [editableClusters, setEditableClusters] = useState<EditableCluster[]>(
     []
@@ -37,12 +65,6 @@ export function CCPCAIClusterList({
   useEffect(() => {
     const mapped = clusters.map((cluster, index) => {
       const clusterId = String(cluster.id ?? `cluster-${index}`);
-      const rawItems = cluster.items ?? cluster.cards ?? [];
-
-      const items = rawItems.map((item: any) => {
-        if (typeof item === "string") return item;
-        return item.text ?? "";
-      });
 
       return {
         id: clusterId,
@@ -50,26 +72,79 @@ export function CCPCAIClusterList({
           cluster.clusterName ??
           cluster.suggestedName ??
           `Cluster ${index + 1}`,
-        items,
-        finalised: false,
+        items: normaliseClusterItems(cluster),
+        finalised: Boolean(cluster.finalised),
+        source: cluster,
       };
     });
 
-    setEditableClusters(mapped);
+    const timer = window.setTimeout(() => {
+      setEditableClusters(mapped);
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [clusters]);
 
+  function toAIClusters(items: EditableCluster[]): AICluster[] {
+    return items.map((cluster) => {
+      const cards = cluster.items.map((text, itemIndex) => ({
+        id: `${cluster.id}-card-${itemIndex + 1}`,
+        text,
+      }));
+
+      return {
+        ...cluster.source,
+        id: cluster.id,
+        clusterName: cluster.name,
+        suggestedName: cluster.name,
+        items: cluster.items,
+        cards,
+        cardIds: cards.map((card) => card.id),
+        confidence: cluster.source?.confidence ?? 0,
+        suggestedCategory: (cluster.source?.suggestedCategory ??
+          "Core Candidate") as ClusterSuggestionCategory,
+        notes: cluster.source?.notes ?? "",
+        finalised: cluster.finalised,
+      };
+    });
+  }
+
+  function publishClusters(next: EditableCluster[]) {
+    if (!onClustersChange) return;
+
+    window.setTimeout(() => {
+      onClustersChange(toAIClusters(next));
+    }, 0);
+  }
+
+  function updateEditableClusters(
+    updater: (clusters: EditableCluster[]) => EditableCluster[]
+  ) {
+    setEditableClusters((prev) => {
+      const next = updater(prev);
+      publishClusters(next);
+      return next;
+    });
+  }
+
+  function isClusterLocked(cluster: EditableCluster) {
+    return readOnly || cluster.finalised;
+  }
+
   function updateClusterName(clusterId: string, value: string) {
-    setEditableClusters((prev) =>
+    updateEditableClusters((prev) =>
       prev.map((cluster) =>
-        cluster.id === clusterId ? { ...cluster, name: value } : cluster
+        cluster.id === clusterId && !isClusterLocked(cluster)
+          ? { ...cluster, name: value }
+          : cluster
       )
     );
   }
 
   function updateItem(clusterId: string, itemIndex: number, value: string) {
-    setEditableClusters((prev) =>
+    updateEditableClusters((prev) =>
       prev.map((cluster) =>
-        cluster.id === clusterId
+        cluster.id === clusterId && !isClusterLocked(cluster)
           ? {
               ...cluster,
               items: cluster.items.map((item, index) =>
@@ -82,25 +157,24 @@ export function CCPCAIClusterList({
   }
 
   function addCluster() {
+    if (readOnly) return;
+
     const newId = `manual-${Date.now()}`;
+    const nextCluster: EditableCluster = {
+      id: newId,
+      name: "Nama Cluster Baharu",
+      items: [""],
+      finalised: false,
+    };
 
-    setEditableClusters((prev) => [
-      ...prev,
-      {
-        id: newId,
-        name: "Nama Cluster Baharu",
-        items: [""],
-        finalised: false,
-      },
-    ]);
-
+    updateEditableClusters((prev) => [...prev, nextCluster]);
     onSelect(newId);
   }
 
   function addItem(clusterId: string) {
-    setEditableClusters((prev) =>
+    updateEditableClusters((prev) =>
       prev.map((cluster) =>
-        cluster.id === clusterId
+        cluster.id === clusterId && !isClusterLocked(cluster)
           ? { ...cluster, items: [...cluster.items, ""] }
           : cluster
       )
@@ -108,9 +182,9 @@ export function CCPCAIClusterList({
   }
 
   function deleteItem(clusterId: string, itemIndex: number) {
-    setEditableClusters((prev) =>
+    updateEditableClusters((prev) =>
       prev.map((cluster) =>
-        cluster.id === clusterId
+        cluster.id === clusterId && !isClusterLocked(cluster)
           ? {
               ...cluster,
               items: cluster.items.filter((_, index) => index !== itemIndex),
@@ -121,19 +195,64 @@ export function CCPCAIClusterList({
   }
 
   function deleteCluster(clusterId: string) {
-    setEditableClusters((prev) =>
-      prev.filter((cluster) => cluster.id !== clusterId)
+    if (readOnly) return;
+
+    const cluster = editableClusters.find((item) => item.id === clusterId);
+    const confirmed = window.confirm(
+      `Padam cluster "${cluster?.name || clusterId}"? Semua DACUM card dalam cluster ini akan dikeluarkan daripada senarai cluster.`
     );
+
+    if (!confirmed) return;
+
+    updateEditableClusters((prev) => {
+      const next = prev.filter((item) => item.id !== clusterId);
+      const nextSelected = next[0]?.id ?? null;
+
+      if (selectedClusterId === clusterId && nextSelected) {
+        window.setTimeout(() => onSelect(nextSelected), 0);
+      }
+
+      return next;
+    });
   }
 
   function saveCluster(clusterId: string) {
-    alert("Perubahan cluster telah disimpan sementara.");
+    const cluster = editableClusters.find((item) => item.id === clusterId);
+
+    if (!cluster || readOnly) return;
+
+    publishClusters(editableClusters);
+    alert(`Cluster "${cluster.name}" telah disimpan.`);
   }
 
   function finaliseCluster(clusterId: string) {
-    setEditableClusters((prev) =>
+    updateEditableClusters((prev) =>
+      prev.map((cluster) => {
+        if (cluster.id !== clusterId || readOnly) return cluster;
+
+        const cleanItems = cluster.items.filter((item) => item.trim().length > 0);
+
+        if (!cluster.name.trim() || cleanItems.length === 0) {
+          alert("Sila pastikan nama cluster dan sekurang-kurangnya satu DACUM card telah diisi.");
+          return cluster;
+        }
+
+        return {
+          ...cluster,
+          name: cluster.name.trim(),
+          items: cleanItems,
+          finalised: true,
+        };
+      })
+    );
+  }
+
+  function editCluster(clusterId: string) {
+    if (readOnly) return;
+
+    updateEditableClusters((prev) =>
       prev.map((cluster) =>
-        cluster.id === clusterId ? { ...cluster, finalised: true } : cluster
+        cluster.id === clusterId ? { ...cluster, finalised: false } : cluster
       )
     );
   }
@@ -141,6 +260,8 @@ export function CCPCAIClusterList({
   const finalisedCount = editableClusters.filter(
     (cluster) => cluster.finalised
   ).length;
+  const allFinalised =
+    editableClusters.length > 0 && finalisedCount === editableClusters.length;
 
   if (!editableClusters || editableClusters.length === 0) {
     return (
@@ -151,19 +272,27 @@ export function CCPCAIClusterList({
               Senarai Cluster AI
             </h3>
             <p className="mt-3 text-sm text-slate-500">
-              Belum ada hasil clustering. Tekan butang{" "}
-              <strong>Run AI Clustering</strong>.
+              Belum ada hasil clustering. {" "}
+              {readOnly ? (
+                "Pegawai Penilai hanya boleh melihat hasil yang telah dijana."
+              ) : (
+                <>
+                  Tekan butang <strong>Run AI Clustering</strong>.
+                </>
+              )}
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={addCluster}
-            className="inline-flex items-center gap-2 rounded-xl border border-blue-200 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-50"
-          >
-            <Plus size={16} />
-            Tambah Nama Cluster
-          </button>
+          {!readOnly ? (
+            <button
+              type="button"
+              onClick={addCluster}
+              className="inline-flex items-center gap-2 rounded-xl border border-blue-200 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-50"
+            >
+              <Plus size={16} />
+              Tambah Nama Cluster
+            </button>
+          ) : null}
         </div>
       </div>
     );
@@ -177,40 +306,62 @@ export function CCPCAIClusterList({
             Senarai Cluster AI
           </h3>
           <p className="mt-1 text-sm text-slate-500">
-            Semak, tambah, edit dan finalise cluster sebelum diteruskan ke CCP.
+            {readOnly
+              ? "Semak cluster yang telah dijana untuk tujuan penilaian."
+              : "Semak, tambah, edit dan finalise cluster sebelum diteruskan ke CCP."}
           </p>
         </div>
 
-        <div className="flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={addCluster}
-            className="inline-flex items-center gap-2 rounded-xl border border-blue-200 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-50"
-          >
-            <Plus size={16} />
-            Tambah Nama Cluster
-          </button>
+        {!readOnly ? (
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={addCluster}
+              className="inline-flex items-center gap-2 rounded-xl border border-blue-200 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-50"
+            >
+              <Plus size={16} />
+              Tambah Nama Cluster
+            </button>
 
-          <button
-            type="button"
-            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
-          >
-            <ArrowRight size={16} />
-            Proceed to CCP
-          </button>
-        </div>
+            {allFinalised && proceedHref ? (
+              <Link
+                href={proceedHref}
+                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
+              >
+                <ArrowRight size={16} />
+                Proceed to CCP
+              </Link>
+            ) : (
+              <button
+                type="button"
+                disabled
+                title="Finalise semua cluster sebelum teruskan ke CCP"
+                className="inline-flex cursor-not-allowed items-center gap-2 rounded-xl bg-slate-300 px-4 py-2.5 text-sm font-semibold text-white"
+              >
+                <ArrowRight size={16} />
+                Proceed to CCP
+              </button>
+            )}
+          </div>
+        ) : null}
       </div>
 
       <div className="border-b border-slate-200 bg-slate-50 px-5 py-3 text-sm text-slate-600">
-        Finalised:{" "}
+        Finalised: {" "}
         <span className="font-bold text-emerald-700">
           {finalisedCount}/{editableClusters.length}
         </span>
+        {!allFinalised && !readOnly ? (
+          <span className="ml-2 text-slate-500">
+            Finalise semua cluster untuk aktifkan Proceed to CCP.
+          </span>
+        ) : null}
       </div>
 
       <div className="space-y-5 p-4">
         {editableClusters.map((cluster, index) => {
           const active = selectedClusterId === cluster.id;
+          const locked = isClusterLocked(cluster);
 
           return (
             <div
@@ -232,13 +383,19 @@ export function CCPCAIClusterList({
                     Nama Cluster
                   </label>
 
-                  <input
-                    value={cluster.name}
-                    onChange={(e) =>
-                      updateClusterName(cluster.id, e.target.value)
-                    }
-                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none focus:border-blue-500"
-                  />
+                  {locked ? (
+                    <div className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800">
+                      {cluster.name}
+                    </div>
+                  ) : (
+                    <input
+                      value={cluster.name}
+                      onChange={(e) =>
+                        updateClusterName(cluster.id, e.target.value)
+                      }
+                      className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none focus:border-blue-500"
+                    />
+                  )}
                 </div>
 
                 <div className="flex flex-wrap gap-2">
@@ -248,41 +405,61 @@ export function CCPCAIClusterList({
                     </span>
                   )}
 
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      saveCluster(cluster.id);
-                    }}
-                    className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                  >
-                    <Save size={15} />
-                    Save
-                  </button>
+                  {!readOnly ? (
+                    <>
+                      {!cluster.finalised ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              saveCluster(cluster.id);
+                            }}
+                            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                          >
+                            <Save size={15} />
+                            Save
+                          </button>
 
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      finaliseCluster(cluster.id);
-                    }}
-                    className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
-                  >
-                    <CheckCircle2 size={15} />
-                    Agree / Finalise
-                  </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              finaliseCluster(cluster.id);
+                            }}
+                            className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+                          >
+                            <CheckCircle2 size={15} />
+                            Agree / Finalise
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            editCluster(cluster.id);
+                          }}
+                          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                        >
+                          <Pencil size={15} />
+                          Edit
+                        </button>
+                      )}
 
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteCluster(cluster.id);
-                    }}
-                    className="inline-flex items-center gap-2 rounded-xl border border-red-200 px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50"
-                  >
-                    <Trash2 size={15} />
-                    Delete
-                  </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteCluster(cluster.id);
+                        }}
+                        className="inline-flex items-center gap-2 rounded-xl border border-red-200 px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50"
+                      >
+                        <Trash2 size={15} />
+                        Delete
+                      </button>
+                    </>
+                  ) : null}
                 </div>
               </div>
 
@@ -303,41 +480,52 @@ export function CCPCAIClusterList({
                       key={`${cluster.id}-${itemIndex}`}
                       className="flex gap-2"
                     >
-                      <textarea
-                        value={item}
-                        onChange={(e) =>
-                          updateItem(cluster.id, itemIndex, e.target.value)
-                        }
-                        rows={2}
-                        className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-700 outline-none focus:border-blue-500"
-                        placeholder="Masukkan DACUM card..."
-                      />
+                      {locked ? (
+                        <div className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                          {item || "-"}
+                        </div>
+                      ) : (
+                        <>
+                          <textarea
+                            value={item}
+                            onChange={(e) =>
+                              updateItem(cluster.id, itemIndex, e.target.value)
+                            }
+                            rows={2}
+                            className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-700 outline-none focus:border-blue-500"
+                            placeholder="Masukkan DACUM card..."
+                          />
 
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteItem(cluster.id, itemIndex);
-                        }}
-                        className="rounded-xl border border-red-200 px-3 text-red-600 hover:bg-red-50"
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteItem(cluster.id, itemIndex);
+                            }}
+                            className="rounded-xl border border-red-200 px-3 text-red-600 hover:bg-red-50"
+                            title="Padam DACUM card"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </>
+                      )}
                     </div>
                   ))}
                 </div>
 
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    addItem(cluster.id);
-                  }}
-                  className="mt-3 inline-flex items-center gap-2 rounded-xl border border-blue-200 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-50"
-                >
-                  <Plus size={16} />
-                  Tambah DACUM Card
-                </button>
+                {!locked ? (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      addItem(cluster.id);
+                    }}
+                    className="mt-3 inline-flex items-center gap-2 rounded-xl border border-blue-200 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-50"
+                  >
+                    <Plus size={16} />
+                    Tambah DACUM Card
+                  </button>
+                ) : null}
               </div>
             </div>
           );

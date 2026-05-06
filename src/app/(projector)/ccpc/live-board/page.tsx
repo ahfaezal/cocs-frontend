@@ -1,20 +1,19 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import {
-  ArrowLeft,
-  Monitor,
-  Play,
-  RefreshCw,
-  Snowflake,
-} from "lucide-react";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { ArrowLeft, Monitor, Play, RefreshCw, Snowflake } from "lucide-react";
 
 import { DacumCardGrid } from "@/components/ccpc/dacum-card-grid";
 import { DEFAULT_SESSION_ID } from "@/lib/env";
 
-export default function LiveBoardPage() {
+function LiveBoardContent() {
+  const searchParams = useSearchParams();
   const [freeze, setFreeze] = useState(false);
+  const sessionId = searchParams.get("sessionId") || DEFAULT_SESSION_ID;
+  const projectId = searchParams.get("projectId") || "";
+  const backHref = projectId ? `/ccpc?projectId=${projectId}` : "/ccpc";
 
   return (
     <main className="min-h-screen bg-slate-100">
@@ -30,15 +29,13 @@ export default function LiveBoardPage() {
                 Live Board (DACUM Card)
               </h1>
 
-              <p className="text-sm text-slate-500">
-                Session: {DEFAULT_SESSION_ID}
-              </p>
+              <p className="text-sm text-slate-500">Session: {sessionId}</p>
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
             <Link
-              href="/ccpc"
+              href={backHref}
               className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
             >
               <ArrowLeft size={16} />
@@ -68,13 +65,28 @@ export default function LiveBoardPage() {
 
       {freeze && (
         <div className="border-b border-amber-200 bg-amber-50 px-8 py-3 text-sm font-medium text-amber-700">
-          Freeze Mode aktif — paparan dikekalkan untuk semakan fasilitator.
+          Freeze Mode aktif - paparan dikekalkan untuk semakan fasilitator.
         </div>
       )}
 
       <div className="p-6">
-        <DacumCardGrid />
+        <DacumCardGrid sessionId={sessionId} sessionActive={!freeze} />
       </div>
     </main>
   );
 }
+
+export default function LiveBoardPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen bg-slate-100 p-6 text-sm text-slate-500">
+          Memuatkan live board...
+        </main>
+      }
+    >
+      <LiveBoardContent />
+    </Suspense>
+  );
+}
+

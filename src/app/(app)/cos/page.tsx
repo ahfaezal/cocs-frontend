@@ -1,278 +1,413 @@
-"use client";
+﻿"use client";
 
-import Link from "next/link";
-import { useEffect, useState } from "react";
-import {
-  ChevronRight,
-  Info,
-  FileText,
-  Route,
-  Upload,
-  Plus,
-  Pencil,
-  Trash2,
-  ChevronUp,
-  ChevronDown,
-  Eye,
-  X,
-  Save,
-  ArrowRight,
-  Lightbulb,
-} from "lucide-react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ArrowRight, ChevronRight, Info, Plus, Trash2 } from "lucide-react";
 
-type CareerRow = {
-  level: number;
-  jobTitle: string;
-  description: string;
-  target?: boolean;
-};
+import { getAuthToken } from "@/lib/auth";
+import { API_URL } from "@/lib/env";
+import { hasPermission } from "@/lib/permissions";
+import { useCurrentUser } from "@/lib/use-current-user";
 
-type CareerPath = {
-  id: number;
+type ProjectInfo = {
+  id: string;
+  code: string;
   title: string;
-  active?: boolean;
-  rows: CareerRow[];
+  sector: string;
+  subsector: string;
+  area: string;
+  level: string;
+  status: string;
 };
 
-const STORAGE_KEY = "cocs-cos-career-paths";
+type COSMatrix = {
+  subareas: string[];
+  levels: Record<number, string[]>;
+  selectedTarget: {
+    level: number;
+    columnIndex: number;
+  } | null;
+};
 
-const defaultCareerPaths: CareerPath[] = [
-  {
-    id: 1,
-    title: "Kerja Batu dan Konkrit",
-    active: true,
-    rows: [
-      {
-        level: 6,
-        jobTitle: "Construction Project Manager",
-        description:
-          "Mengurus keseluruhan projek pembinaan, perancangan strategik, kos dan sumber.",
-      },
-      {
-        level: 5,
-        jobTitle: "Construction Manager",
-        description:
-          "Mengurus pelaksanaan projek di tapak, penyeliaan pasukan dan kawalan kualiti.",
-      },
-      {
-        level: 4,
-        jobTitle: "Site Supervisor",
-        description:
-          "Menyelia kerja harian di tapak, memastikan pematuhan spesifikasi dan keselamatan.",
-      },
-      {
-        level: 3,
-        jobTitle: "Bricklayer / Wet Trade Foreman",
-        description:
-          "Menyelia kerja pasangan bata dan konkrit, agihan tugasan dan kawalan mutu kerja.",
-        target: true,
-      },
-      {
-        level: 2,
-        jobTitle: "Bricklayer 2",
-        description:
-          "Melaksanakan kerja pasangan bata dan konkrit mengikut arahan dan spesifikasi.",
-      },
-      {
-        level: 1,
-        jobTitle: "Bricklayer 1",
-        description:
-          "Membantu kerja pasangan bata dan konkrit asas di bawah pengawasan.",
-      },
-    ],
-  },
-  {
-    id: 2,
-    title: "Kerja Plaster dan Render",
-    active: true,
-    rows: [],
-  },
-];
-
-function LevelBadge({
-  level,
-  target = false,
+function COSDocumentMode({
+  projectInfo,
+  matrix,
 }: {
-  level: number;
-  target?: boolean;
-}) {
-  const base =
-    "inline-flex h-9 w-9 items-center justify-center rounded-lg text-sm font-bold";
-
-  if (target) {
-    return <span className={`${base} bg-emerald-500 text-white`}>{level}</span>;
-  }
-
-  const map: Record<number, string> = {
-    6: "bg-violet-100 text-violet-700",
-    5: "bg-indigo-100 text-indigo-700",
-    4: "bg-blue-100 text-blue-700",
-    3: "bg-emerald-100 text-emerald-700",
-    2: "bg-amber-100 text-amber-700",
-    1: "bg-orange-100 text-orange-700",
-  };
-
-  return (
-    <span className={`${base} ${map[level] || "bg-slate-100 text-slate-700"}`}>
-      {level}
-    </span>
-  );
-}
-
-function CareerPathTable({
-  path,
-  onDelete,
-}: {
-  path: CareerPath;
-  onDelete: (id: number) => void;
+  projectInfo: ProjectInfo;
+  matrix: COSMatrix;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
-        <div className="flex items-center gap-3">
-          <div className="text-lg font-bold text-slate-900">
-            Laluan Kerjaya {path.id}:
-          </div>
-          <div className="text-2xl font-semibold text-blue-700">
-            {path.title}
-          </div>
-          {path.active && (
-            <span className="rounded-full bg-emerald-100 px-3 py-1 text-sm font-semibold text-emerald-700">
-              Aktif
-            </span>
-          )}
-        </div>
+    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <h2 className="mb-4 text-lg font-bold text-slate-900">
+        Construction Occupational Structure (COS)
+      </h2>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <button className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-blue-700 transition hover:bg-slate-50">
-            <Pencil size={16} />
-            Ubah Laluan
-          </button>
+      <div className="overflow-x-auto">
+        <table className="min-w-full border border-black text-sm text-black">
+          <tbody>
+            <tr>
+              <th className="w-32 border border-black bg-slate-200 px-4 py-3 text-left">
+                Sector
+              </th>
+              <td
+                colSpan={matrix.subareas.length}
+                className="border border-black bg-slate-200 px-4 py-3 text-center font-bold"
+              >
+                {projectInfo.sector}
+              </td>
+            </tr>
 
-          <button
-            onClick={() => onDelete(path.id)}
-            className="inline-flex items-center gap-2 rounded-xl border border-red-200 px-4 py-2.5 text-sm font-medium text-red-600 transition hover:bg-red-50"
-          >
-            <Trash2 size={16} />
-            Padam Laluan
-          </button>
+            <tr>
+              <th className="border border-black bg-slate-200 px-4 py-3 text-left">
+                Sub Sector
+              </th>
+              <td
+                colSpan={matrix.subareas.length}
+                className="border border-black bg-slate-200 px-4 py-3 text-center font-bold"
+              >
+                {projectInfo.subsector}
+              </td>
+            </tr>
 
-          <button className="rounded-xl border border-slate-200 p-2.5 text-slate-600 transition hover:bg-slate-50">
-            <ChevronUp size={16} />
-          </button>
+            <tr>
+              <th
+                rowSpan={2}
+                className="border border-black bg-slate-200 px-4 py-3 text-left"
+              >
+                Area
+              </th>
+              <td
+                colSpan={matrix.subareas.length}
+                className="border border-black bg-slate-200 px-4 py-3 text-center font-bold"
+              >
+                {projectInfo.area}
+              </td>
+            </tr>
 
-          <button className="rounded-xl border border-slate-200 p-2.5 text-slate-600 transition hover:bg-slate-50">
-            <ChevronDown size={16} />
-          </button>
-        </div>
-      </div>
-
-      {path.rows.length > 0 ? (
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-left text-slate-500">
-              <tr>
-                <th className="w-24 px-5 py-4">Tahap</th>
-                <th className="px-5 py-4">Jawatan / Pekerjaan</th>
-                <th className="px-5 py-4">Deskripsi Ringkas Tanggungjawab</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {path.rows.map((row) => (
-                <tr
-                  key={`${path.id}-${row.level}`}
-                  className={`border-b border-slate-100 ${
-                    row.target ? "bg-emerald-50" : "bg-white"
-                  }`}
+            <tr>
+              {matrix.subareas.map((subarea, index) => (
+                <td
+                  key={`doc-subarea-${index}`}
+                  className="border border-black bg-slate-200 px-4 py-3 text-center font-bold"
                 >
-                  <td className="px-5 py-4">
-                    <div className="flex items-center gap-3">
-                      <LevelBadge level={row.level} target={row.target} />
-                      {row.target && (
-                        <span className="h-2.5 w-2.5 rounded-full border border-emerald-500 bg-white" />
-                      )}
-                    </div>
-                  </td>
-
-                  <td className="px-5 py-4 font-semibold text-slate-900">
-                    <div className="flex flex-wrap items-center gap-2">
-                      {row.jobTitle}
-                      {row.target && (
-                        <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">
-                          TAHAP SASARAN
-                        </span>
-                      )}
-                    </div>
-                  </td>
-
-                  <td className="px-5 py-4 text-slate-600">
-                    {row.description}
-                  </td>
-                </tr>
+                  {subarea || `Subarea ${index + 1}`}
+                </td>
               ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="flex items-center justify-between gap-3 px-5 py-6">
-          <p className="text-sm text-slate-500">
-            Laluan ini masih belum dipaparkan dalam bentuk jadual ringkas.
-          </p>
+            </tr>
 
-          <button className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-blue-700 transition hover:bg-slate-50">
-            <Eye size={16} />
-            Lihat Struktur
-          </button>
-        </div>
-      )}
+            {LEVELS.map((level) => (
+              <tr key={`doc-level-${level}`}>
+                <th className="border border-black px-4 py-3 text-left">
+                  Level {level}
+                </th>
+
+                {matrix.levels[level].map((value, columnIndex) => (
+                  <td
+                    key={`doc-level-${level}-${columnIndex}`}
+                    className="border border-black px-4 py-3 text-center"
+                  >
+                    {value || "-"}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
 
-export default function COSPage() {
-  const [careerPaths, setCareerPaths] =
-    useState<CareerPath[]>(defaultCareerPaths);
+const LEVELS = [6, 5, 4, 3, 2, 1];
+
+function createEmptyMatrix(): COSMatrix {
+  return {
+    subareas: ["Subarea 1", "Subarea 2"],
+    levels: {
+      6: ["", ""],
+      5: ["", ""],
+      4: ["", ""],
+      3: ["", ""],
+      2: ["", ""],
+      1: ["", ""],
+    },
+    selectedTarget: null,
+  };
+}
+
+function getStorageKey(projectId: string) {
+  return `cocs-cos-structure-${projectId}`;
+}
+
+function getTargetStorageKey(projectId: string) {
+  return `cocs-target-occupation-${projectId}`;
+}
+
+function COSPageContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const currentUser = useCurrentUser();
+
+  const projectId = searchParams.get("projectId") || "";
+  const canEditCOS = hasPermission(currentUser.role, "content:update_assigned");
+
+  const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+
+  const [projectInfo, setProjectInfo] = useState<ProjectInfo>({
+    id: "",
+    code: "-",
+    title: "-",
+    sector: "-",
+    subsector: "-",
+    area: "-",
+    level: "-",
+    status: "draft",
+  });
+
+  const [matrix, setMatrix] = useState<COSMatrix>(() => createEmptyMatrix());
+  const [viewMode, setViewMode] = useState<"builder" | "document">("builder");
+
+  const storageKey = useMemo(
+    () => (projectId ? getStorageKey(projectId) : ""),
+    [projectId]
+  );
 
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
+    async function loadProject() {
+      if (!projectId) {
+        setLoading(false);
+        setErrorMessage("Sila pilih projek daripada Senarai Projek COCS dahulu.");
+        return;
+      }
+
       try {
-        setCareerPaths(JSON.parse(saved));
-      } catch {
-        setCareerPaths(defaultCareerPaths);
+        setLoading(true);
+        setErrorMessage("");
+
+        const token = getAuthToken();
+
+        const res = await fetch(`${API_URL}/projects/${projectId}`, {
+          cache: "no-store",
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        });
+
+        if (!res.ok) {
+          throw new Error("Gagal mendapatkan maklumat projek.");
+        }
+
+        const data = await res.json();
+
+        setProjectInfo({
+          id: String(data.id),
+          code: data.project_code || data.code || `COCS/${data.id}`,
+          title: data.project_title || data.title || "-",
+          sector: data.sector_name || data.sector || "-",
+          subsector: data.subsector_name || data.subsector || data.field || "-",
+          area: data.area || "-",
+          level: String(data.level || data.tahap || "-"),
+          status: data.status || "draft",
+        });
+      } catch (error) {
+        console.error("Gagal load project COS:", error);
+        setErrorMessage("Gagal memuatkan maklumat projek COS.");
+      } finally {
+        setLoading(false);
       }
     }
-  }, []);
 
-  function saveDraft() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(careerPaths));
-    setMessage("Struktur COS berjaya disimpan sebagai draf.");
-    setTimeout(() => setMessage(""), 2500);
-  }
+    loadProject();
+  }, [projectId]);
 
-  function addCareerPath() {
-    const nextId = careerPaths.length + 1;
+  useEffect(() => {
+    if (!storageKey) return;
 
-    setCareerPaths((prev) => [
+    const saved = window.localStorage.getItem(storageKey);
+
+    if (!saved) {
+      setMatrix(createEmptyMatrix());
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(saved);
+
+      setMatrix({
+        ...createEmptyMatrix(),
+        ...parsed,
+        selectedTarget: parsed.selectedTarget ?? null,
+      });
+    } catch {
+      setMatrix(createEmptyMatrix());
+    }
+  }, [storageKey]);
+
+  function updateSubarea(index: number, value: string) {
+    setMatrix((prev) => ({
       ...prev,
-      {
-        id: nextId,
-        title: `Laluan Kerjaya Baharu ${nextId}`,
-        active: true,
-        rows: [],
-      },
-    ]);
+      subareas: prev.subareas.map((item, itemIndex) =>
+        itemIndex === index ? value : item
+      ),
+    }));
   }
 
-  function deleteCareerPath(id: number) {
-    setCareerPaths((prev) => prev.filter((item) => item.id !== id));
+  function addSubarea() {
+    setMatrix((prev) => {
+      const nextSubareas = [
+        ...prev.subareas,
+        `Subarea ${prev.subareas.length + 1}`,
+      ];
+
+      const nextLevels = LEVELS.reduce<Record<number, string[]>>(
+        (acc, level) => {
+          acc[level] = [...prev.levels[level], ""];
+          return acc;
+        },
+        {}
+      );
+
+      return {
+        subareas: nextSubareas,
+        levels: nextLevels,
+        selectedTarget: prev.selectedTarget,
+      };
+    });
   }
+
+  function deleteSubarea(index: number) {
+    if (matrix.subareas.length <= 1) {
+      alert("Sekurang-kurangnya satu column subarea diperlukan.");
+      return;
+    }
+
+    const confirmDelete = window.confirm(
+      "Padam subarea ini? Semua jawatan dalam column ini juga akan dipadam."
+    );
+
+    if (!confirmDelete) return;
+
+    setMatrix((prev) => {
+      const nextSubareas = prev.subareas.filter(
+        (_, itemIndex) => itemIndex !== index
+      );
+
+      const nextLevels = LEVELS.reduce<Record<number, string[]>>(
+        (acc, level) => {
+          acc[level] = prev.levels[level].filter(
+            (_, itemIndex) => itemIndex !== index
+          );
+          return acc;
+        },
+        {}
+      );
+
+      const selectedTarget =
+        prev.selectedTarget && prev.selectedTarget.columnIndex === index
+          ? null
+          : prev.selectedTarget && prev.selectedTarget.columnIndex > index
+            ? {
+                ...prev.selectedTarget,
+                columnIndex: prev.selectedTarget.columnIndex - 1,
+              }
+            : prev.selectedTarget;
+
+      return {
+        subareas: nextSubareas,
+        levels: nextLevels,
+        selectedTarget,
+      };
+    });
+  }
+
+  function updateLevelValue(level: number, columnIndex: number, value: string) {
+    setMatrix((prev) => ({
+      ...prev,
+      levels: {
+        ...prev.levels,
+        [level]: prev.levels[level].map((item, itemIndex) =>
+          itemIndex === columnIndex ? value : item
+        ),
+      },
+    }));
+  }
+
+  function selectTargetOccupation(level: number, columnIndex: number) {
+    setMatrix((prev) => ({
+      ...prev,
+      selectedTarget: {
+        level,
+        columnIndex,
+      },
+    }));
+  }
+
+  const selectedTargetTitle = matrix.selectedTarget
+    ? matrix.levels[matrix.selectedTarget.level]?.[
+        matrix.selectedTarget.columnIndex
+      ] || ""
+    : "";
+
+  const selectedTargetSubarea = matrix.selectedTarget
+    ? matrix.subareas[matrix.selectedTarget.columnIndex] || ""
+    : "";
 
   function saveAndNext() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(careerPaths));
-    window.location.href = "/ccpc";
+    if (!projectId || !storageKey) {
+      setErrorMessage("Project ID tidak ditemui. Sila pilih projek dahulu.");
+      return;
+    }
+
+    if (!matrix.selectedTarget) {
+      setErrorMessage("Sila pilih satu jawatan sebagai Tajuk Fokus.");
+      return;
+    }
+
+    const selectedTitle =
+      matrix.levels[matrix.selectedTarget.level]?.[
+        matrix.selectedTarget.columnIndex
+      ] || "";
+
+    if (!selectedTitle.trim()) {
+      setErrorMessage("Jawatan Tajuk Fokus tidak boleh kosong.");
+      return;
+    }
+
+    const targetPayload = {
+      projectId,
+      occupationTitle: selectedTitle.trim(),
+      subarea: selectedTargetSubarea,
+      level: matrix.selectedTarget.level,
+      columnIndex: matrix.selectedTarget.columnIndex,
+    };
+
+    window.localStorage.setItem(storageKey, JSON.stringify(matrix));
+    window.localStorage.setItem(
+      getTargetStorageKey(projectId),
+      JSON.stringify(targetPayload)
+    );
+
+    router.push(`/ccpc?projectId=${projectId}`);
+  }
+
+  if (!projectId) {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-6 py-5 text-sm font-medium text-amber-800">
+          Sila pilih projek daripada Senarai Projek COCS terlebih dahulu.
+        </div>
+
+        <button
+          type="button"
+          onClick={() => router.push("/projects")}
+          className="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white transition hover:bg-blue-700"
+        >
+          Pergi ke Senarai Projek
+        </button>
+      </div>
+    );
   }
 
   return (
@@ -282,14 +417,14 @@ export default function COSPage() {
           <div className="flex flex-wrap items-center gap-3 text-sm">
             <span className="text-slate-500">Projek:</span>
             <span className="text-2xl font-bold text-blue-700">
-              COCS/2024/001 – Bricklayer (Wet Trade) Level 3
+              {projectInfo.code} - {projectInfo.title}
             </span>
           </div>
 
           <div className="flex items-center gap-3">
             <span className="text-sm text-slate-500">Status:</span>
             <span className="rounded-full bg-blue-100 px-3 py-1 text-sm font-semibold text-blue-700">
-              Dalam Pembangunan
+              {projectInfo.status}
             </span>
           </div>
         </div>
@@ -301,7 +436,13 @@ export default function COSPage() {
         </div>
       )}
 
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      {errorMessage && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-semibold text-red-700">
+          {errorMessage}
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <div className="mb-2 flex flex-wrap items-center gap-2 text-sm text-slate-500">
             <span>Dashboard</span>
@@ -326,134 +467,269 @@ export default function COSPage() {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <button className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 font-medium text-blue-700 transition hover:bg-slate-50">
-            <FileText size={16} />
-            Rasional Struktur
-          </button>
-
-          <button className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 font-medium text-blue-700 transition hover:bg-slate-50">
-            <Route size={16} />
-            Laluan Kerjaya
-          </button>
-
-          <button className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 font-medium text-blue-700 transition hover:bg-slate-50">
-            <Upload size={16} />
-            Import Struktur
+        <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
+          <button
+            type="button"
+            onClick={() => setViewMode("builder")}
+            className={`rounded-lg px-5 py-2 text-sm font-semibold ${
+              viewMode === "builder"
+                ? "bg-blue-600 text-white"
+                : "text-slate-600 hover:bg-slate-50"
+            }`}
+          >
+            Builder Mode
           </button>
 
           <button
-            onClick={addCareerPath}
-            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white transition hover:bg-blue-700"
+            type="button"
+            onClick={() => setViewMode("document")}
+            className={`rounded-lg px-5 py-2 text-sm font-semibold ${
+              viewMode === "document"
+                ? "bg-blue-600 text-white"
+                : "text-slate-600 hover:bg-slate-50"
+            }`}
           >
-            <Plus size={16} />
-            Tambah Laluan
+            Document Mode
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 rounded-2xl border border-slate-200 bg-white px-6 py-4 shadow-sm lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-4 rounded-2xl border border-slate-200 bg-white px-6 py-4 shadow-sm lg:grid-cols-5">
         <div>
           <p className="text-sm text-slate-500">Sektor</p>
-          <p className="mt-1 text-xl font-bold text-slate-900">Construction</p>
-        </div>
-        <div>
-          <p className="text-sm text-slate-500">Subsektor</p>
-          <p className="mt-1 text-xl font-bold text-slate-900">Building</p>
-        </div>
-        <div>
-          <p className="text-sm text-slate-500">Area</p>
-          <p className="mt-1 text-xl font-bold text-slate-900">Architectural</p>
-        </div>
-        <div>
-          <p className="text-sm text-slate-500">Tahap Sasaran Standard</p>
-          <p className="mt-1 text-xl font-bold text-emerald-700">Level 3</p>
-        </div>
-        <div>
-          <p className="text-sm text-slate-500">Laluan Kerjaya Aktif</p>
-          <p className="mt-1 text-xl font-bold text-slate-900">
-            {careerPaths.length}
+          <p className="mt-1 text-lg font-bold text-slate-900">
+            {loading ? "Memuatkan..." : projectInfo.sector}
           </p>
         </div>
+
+        <div>
+          <p className="text-sm text-slate-500">Subsektor</p>
+          <p className="mt-1 text-lg font-bold text-slate-900">
+            {loading ? "Memuatkan..." : projectInfo.subsector}
+          </p>
+        </div>
+
+        <div>
+          <p className="text-sm text-slate-500">Area</p>
+          <p className="mt-1 text-lg font-bold text-slate-900">
+            {loading ? "Memuatkan..." : projectInfo.area}
+          </p>
+        </div>
+
+        <div>
+          <p className="text-sm text-slate-500">Tahap Sasaran Standard</p>
+          <p className="mt-1 text-lg font-bold text-emerald-700">
+            Level {projectInfo.level}
+          </p>
+        </div>
+
         <div>
           <p className="text-sm text-slate-500">Tarikh Kemaskini</p>
-          <p className="mt-1 text-xl font-bold text-slate-900">28 Apr 2026</p>
+          <p className="mt-1 text-lg font-bold text-slate-900">
+            {new Date().toLocaleDateString("ms-MY")}
+          </p>
         </div>
       </div>
 
-      <div className="rounded-2xl border border-blue-100 bg-blue-50 px-5 py-4">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex gap-3">
-            <div className="rounded-full bg-blue-100 p-2 text-blue-700">
-              <Info size={18} />
+      <div className="rounded-2xl border border-blue-200 bg-blue-50 px-6 py-4 shadow-sm">
+        <div className="text-sm font-semibold text-blue-700">Tajuk Fokus</div>
+
+        {selectedTargetTitle ? (
+          <>
+            <div className="mt-1 text-2xl font-bold text-slate-900">
+              {selectedTargetTitle}
             </div>
 
-            <div>
-              <div className="font-bold text-slate-900">Arahan</div>
-              <p className="mt-1 text-sm leading-6 text-slate-600">
-                Bina struktur pekerjaan mengikut tahap 1 hingga 6. Tandakan
-                tahap sasaran standard pada jawatan yang berkaitan. Anda boleh
-                menambah beberapa laluan kerjaya bagi bidang pekerjaan ini.
-              </p>
-            </div>
-          </div>
-
-          <div className="min-w-[250px]">
-            <div className="text-sm font-semibold text-slate-700">Rujukan:</div>
-            <div className="mt-2 flex flex-wrap gap-2">
-              <span className="text-sm font-medium text-blue-700">
-                Akta 520 (Jadual Ketiga)
+            <div className="mt-2 text-sm text-slate-600">
+              Subarea:{" "}
+              <span className="font-semibold">{selectedTargetSubarea}</span>
+              {" | "}
+              Tahap:{" "}
+              <span className="font-semibold">
+                Level {matrix.selectedTarget?.level}
               </span>
-              <span className="text-slate-300">|</span>
-              <span className="text-sm font-medium text-blue-700">MSIC 2008</span>
-              <span className="text-slate-300">|</span>
-              <span className="text-sm font-medium text-blue-700">MASCO</span>
             </div>
+          </>
+        ) : (
+          <div className="mt-1 text-sm text-slate-600">
+            Pilih satu jawatan pada row tahap sasaran untuk dijadikan tajuk utama dokumen.
           </div>
-        </div>
+        )}
       </div>
 
-      {careerPaths.map((path) => (
-        <CareerPathTable
-          key={path.id}
-          path={path}
-          onDelete={deleteCareerPath}
-        />
-      ))}
-
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4">
-        <div className="flex items-start gap-3">
-          <div className="rounded-full bg-amber-100 p-2 text-amber-700">
-            <Lightbulb size={18} />
-          </div>
-
+      {viewMode === "document" ? (
+        <COSDocumentMode projectInfo={projectInfo} matrix={matrix} />
+      ) : (
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-6 py-5">
           <div>
-            <div className="text-lg font-semibold text-slate-900">Nota:</div>
-            <p className="mt-1 text-sm text-slate-600">
-              Simpan struktur sebelum meneruskan ke langkah seterusnya (CCPC).
+            <h2 className="text-lg font-bold text-blue-700">
+              Construction Occupational Structure (COS)
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Lengkapkan struktur pekerjaan berdasarkan perbincangan bersama ahli panel.
+            </p>
+            <p className="mt-1 text-xs font-medium text-slate-500">
+              Nama jawatan yang dipilih sebagai Tajuk Fokus akan digunakan sebagai tajuk utama dokumen.
             </p>
           </div>
+
+          {canEditCOS ? (
+            <button
+              type="button"
+              onClick={addSubarea}
+              className="inline-flex items-center gap-2 rounded-xl border border-blue-200 px-4 py-2.5 text-sm font-semibold text-blue-700 transition hover:bg-blue-50"
+            >
+              <Plus size={16} />
+              Tambah Subarea
+            </button>
+          ) : null}
+        </div>
+
+        <div className="overflow-x-auto p-6">
+          <table className="min-w-full border border-slate-300 text-sm">
+            <tbody>
+              <tr className="bg-slate-100">
+                <th className="w-32 border border-slate-300 px-4 py-3 text-left font-bold text-slate-900">
+                  Sector
+                </th>
+                <td
+                  colSpan={matrix.subareas.length}
+                  className="border border-slate-300 px-4 py-3 text-center font-bold text-slate-900"
+                >
+                  {projectInfo.sector}
+                </td>
+              </tr>
+
+              <tr className="bg-slate-100">
+                <th className="border border-slate-300 px-4 py-3 text-left font-bold text-slate-900">
+                  Sub Sector
+                </th>
+                <td
+                  colSpan={matrix.subareas.length}
+                  className="border border-slate-300 px-4 py-3 text-center font-bold text-slate-900"
+                >
+                  {projectInfo.subsector}
+                </td>
+              </tr>
+
+              <tr className="bg-slate-100">
+                <th className="border border-slate-300 px-4 py-3 text-left font-bold text-slate-900">
+                  Area
+                </th>
+                <td
+                  colSpan={matrix.subareas.length}
+                  className="border border-slate-300 px-4 py-3 text-center font-bold text-slate-900"
+                >
+                  {projectInfo.area}
+                </td>
+              </tr>
+
+              <tr className="bg-slate-100">
+                <th className="border border-slate-300 px-4 py-3 text-left font-bold text-slate-900">
+                  Subarea
+                </th>
+                {matrix.subareas.map((subarea, index) => (
+                  <td
+                    key={`subarea-${index}`}
+                    className="border border-slate-300 px-3 py-3"
+                  >
+                    <div className="flex items-center gap-2">
+                      <input
+                        value={subarea}
+                        onChange={(event) =>
+                          updateSubarea(index, event.target.value)
+                        }
+                        disabled={!canEditCOS}
+                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-center font-semibold text-slate-900 outline-none focus:border-blue-500 disabled:bg-slate-50"
+                        placeholder={`Subarea ${index + 1}`}
+                      />
+
+                      {canEditCOS && matrix.subareas.length > 1 ? (
+                        <button
+                          type="button"
+                          onClick={() => deleteSubarea(index)}
+                          className="rounded-lg border border-red-200 p-2 text-red-600 transition hover:bg-red-50"
+                          title="Padam subarea"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      ) : null}
+                    </div>
+                  </td>
+                ))}
+              </tr>
+
+              {LEVELS.map((level) => {
+                const target = String(level) === String(projectInfo.level);
+
+                return (
+                  <tr
+                    key={level}
+                    className={target ? "bg-emerald-50" : "bg-white"}
+                  >
+                    <th className="border border-slate-300 px-4 py-3 text-left font-bold text-slate-900">
+                      Level {level}
+                    </th>
+
+                    {matrix.levels[level].map((value, columnIndex) => (
+                      <td
+                        key={`${level}-${columnIndex}`}
+                        className="border border-slate-300 px-3 py-3"
+                      >
+                        <input
+                          value={value}
+                          onChange={(event) =>
+                            updateLevelValue(
+                              level,
+                              columnIndex,
+                              event.target.value
+                            )
+                          }
+                          disabled={!canEditCOS}
+                          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-center text-slate-900 outline-none focus:border-blue-500 disabled:bg-slate-50"
+                          placeholder="Masukkan jawatan"
+                        />
+
+                        {target ? (
+                          <>
+                            <label className="mt-2 flex items-center justify-center gap-2 text-xs font-bold text-emerald-700">
+                              <input
+                                type="radio"
+                                name="cos-target-occupation"
+                                checked={
+                                  matrix.selectedTarget?.level === level &&
+                                  matrix.selectedTarget?.columnIndex ===
+                                    columnIndex
+                                }
+                                onChange={() =>
+                                  selectTargetOccupation(level, columnIndex)
+                                }
+                                disabled={!canEditCOS}
+                              />
+                              Pilih Tajuk Fokus
+                            </label>
+
+                            <div className="mt-1 text-center text-xs font-semibold text-emerald-600">
+                              TAHAP SASARAN
+                            </div>
+                          </>
+                        ) : null}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-end gap-3">
-        <Link
-          href="/projects"
-          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-5 py-3 font-medium text-slate-700 transition hover:bg-slate-50"
-        >
-          <X size={16} />
-          Batal
-        </Link>
+      )}
 
+      <div className="flex flex-wrap items-center justify-end">
         <button
-          onClick={saveDraft}
-          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 font-semibold text-slate-700 transition hover:bg-slate-50"
-        >
-          <Save size={16} />
-          Simpan Draf
-        </button>
-
-        <button
+          type="button"
           onClick={saveAndNext}
           className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white transition hover:bg-blue-700"
         >
@@ -462,5 +738,19 @@ export default function COSPage() {
         </button>
       </div>
     </div>
+  );
+}
+
+export default function COSPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
+          Memuatkan halaman COS...
+        </div>
+      }
+    >
+      <COSPageContent />
+    </Suspense>
   );
 }

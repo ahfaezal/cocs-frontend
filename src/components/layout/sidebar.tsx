@@ -2,10 +2,29 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+
 import { sidebarMenu } from "@/data/menu";
+import { hasAnyPermission } from "@/lib/permissions";
+import { useCurrentUser } from "@/lib/use-current-user";
+
+function isActivePath(pathname: string, href: string) {
+  if (href === "/") return pathname === "/";
+
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
 
 export function Sidebar() {
   const pathname = usePathname();
+  const currentUser = useCurrentUser();
+
+  const visibleSections = sidebarMenu
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) =>
+        hasAnyPermission(currentUser.role, item.permissions)
+      ),
+    }))
+    .filter((section) => section.items.length > 0);
 
   return (
     <aside className="flex min-h-screen w-[290px] flex-col bg-[#071d49] text-white">
@@ -18,7 +37,7 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 space-y-6 px-3 py-4">
-        {sidebarMenu.map((section) => (
+        {visibleSections.map((section) => (
           <div key={section.section}>
             {section.title ? (
               <div className="px-3 pb-2 text-xs font-semibold uppercase tracking-wide text-white/50">
@@ -29,17 +48,14 @@ export function Sidebar() {
             <div className="space-y-1">
               {section.items.map((item) => {
                 const Icon = item.icon;
-                const active =
-                    item.href === "/"
-                    ? pathname === "/"
-                    : pathname.startsWith(item.href);
+                const active = isActivePath(pathname, item.href);
 
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
                     className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200 ${
-                    active
+                      active
                         ? "bg-blue-600 text-white shadow-md"
                         : "text-white/90 hover:bg-white/10 hover:pl-5"
                     }`}

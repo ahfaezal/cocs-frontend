@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { API_URL, DEFAULT_SESSION_ID } from "@/lib/env";
+import { API_URL } from "@/lib/env";
 
 type CCPCCard = {
   id: number;
@@ -18,65 +18,92 @@ type CCPCCluster = {
 interface CCPCClusteringSummaryProps {
   result: unknown;
   isRunning: boolean;
+  sessionId: string;
+  sessionActive?: boolean;
 }
 
 export function CCPCClusteringSummary({
   isRunning,
+  sessionId,
+  sessionActive = false,
 }: CCPCClusteringSummaryProps) {
   const [cards, setCards] = useState<CCPCCard[]>([]);
   const [clusters, setClusters] = useState<CCPCCluster[]>([]);
   const [errorMessage, setErrorMessage] = useState("");
 
-  async function loadSummary() {
-    try {
-      setErrorMessage("");
-
-      const cardsRes = await fetch(
-        `${API_URL}/ccpc/cards/${DEFAULT_SESSION_ID}`,
-        { cache: "no-store" }
-      );
-
-      if (!cardsRes.ok) {
-        throw new Error("Gagal mendapatkan kad DACUM.");
-      }
-
-      const cardsData = await cardsRes.json();
-      setCards(Array.isArray(cardsData) ? cardsData : []);
-
-      const clustersRes = await fetch(
-        `${API_URL}/ccpc/clusters/${DEFAULT_SESSION_ID}`,
-        { cache: "no-store" }
-      );
-
-      if (!clustersRes.ok) {
-        setClusters([]);
-        return;
-      }
-
-      const clustersData = await clustersRes.json();
-      setClusters(Array.isArray(clustersData) ? clustersData : []);
-    } catch (error) {
-      console.error("Gagal load clustering summary:", error);
-      setErrorMessage("Sambungan ke backend gagal. Sila semak API server.");
-    }
-  }
-
   useEffect(() => {
+    if (!sessionActive || !sessionId) return;
+
+    let cancelled = false;
+
+    async function loadSummary() {
+      try {
+        setErrorMessage("");
+
+        const cardsRes = await fetch(`${API_URL}/ccpc/cards/${sessionId}`, {
+          cache: "no-store",
+        });
+
+        if (!cardsRes.ok) {
+          throw new Error("Gagal mendapatkan kad DACUM.");
+        }
+
+        const cardsData = await cardsRes.json();
+
+        if (!cancelled) {
+          setCards(Array.isArray(cardsData) ? cardsData : []);
+        }
+
+        const clustersRes = await fetch(`${API_URL}/ccpc/clusters/${sessionId}`, {
+          cache: "no-store",
+        });
+
+        if (!clustersRes.ok) {
+          if (!cancelled) {
+            setClusters([]);
+          }
+          return;
+        }
+
+        const clustersData = await clustersRes.json();
+
+        if (!cancelled) {
+          setClusters(Array.isArray(clustersData) ? clustersData : []);
+        }
+      } catch (error) {
+        console.error("Gagal load clustering summary:", error);
+
+        if (!cancelled) {
+          setErrorMessage("Sambungan ke backend gagal. Sila semak API server.");
+          setCards([]);
+          setClusters([]);
+        }
+      }
+    }
+
     loadSummary();
 
     const timer = setInterval(loadSummary, 3000);
-    return () => clearInterval(timer);
-  }, []);
 
-  const totalCards = cards.length;
-  const uniqueCards = new Set(cards.map((card) => card.task_text)).size;
-  const suggestedClusterCount = clusters.length;
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [sessionActive, sessionId]);
 
-  const statusLabel = isRunning
-    ? "Sedang Diproses"
-    : suggestedClusterCount > 0
-    ? "Selesai Diproses"
-    : "Belum Dijana";
+  const totalCards = sessionActive ? cards.length : 0;
+  const uniqueCards = sessionActive
+    ? new Set(cards.map((card) => card.task_text)).size
+    : 0;
+  const suggestedClusterCount = sessionActive ? clusters.length : 0;
+
+  const statusLabel = !sessionActive
+    ? "Belum Bermula"
+    : isRunning
+      ? "Sedang Diproses"
+      : suggestedClusterCount > 0
+        ? "Selesai Diproses"
+        : "Belum Dijana";
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -121,8 +148,8 @@ export function CCPCClusteringSummary({
               isRunning
                 ? "text-amber-600"
                 : suggestedClusterCount > 0
-                ? "text-emerald-700"
-                : "text-slate-600"
+                  ? "text-emerald-700"
+                  : "text-slate-600"
             }`}
           >
             {statusLabel}

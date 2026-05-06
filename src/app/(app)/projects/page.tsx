@@ -3,11 +3,14 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { PageHeader } from "@/components/shared/page-header";
 import { ProjectFilterBar } from "@/components/projects/project-filter-bar";
 import { ProjectTable } from "@/components/projects/project-table";
+import { PageHeader } from "@/components/shared/page-header";
 import { API_URL } from "@/lib/env";
+import { hasPermission } from "@/lib/permissions";
+import { useCurrentUser } from "@/lib/use-current-user";
 import type { ProjectItem, ProjectStatus } from "@/types/project";
+import { getAuthToken } from "@/lib/auth";
 
 function normalizeProject(project: any): ProjectItem {
   return {
@@ -23,14 +26,22 @@ function normalizeProject(project: any): ProjectItem {
       project.title ||
       "Untitled Project",
     bidangTred:
+      project.subsector_name ||
+      project.subsectorName ||
       project.bidangTred ||
       project.bidang ||
       project.field ||
       project.sector ||
       "Belum Ditetapkan",
+    sector: project.sector || "",
+    sectorName: project.sector_name || project.sectorName || "",
+    subsector: project.subsector || "",
+    subsectorName: project.subsector_name || project.subsectorName || "",
+    area: project.area || "",
+    subarea: project.subarea || "",
     tahap: project.tahap || project.level || "-",
-    jenis: project.jenis || project.type || "Baru",
-    status: (project.status || "Dalam Pembangunan") as ProjectStatus,
+    jenis: project.jenis || project.type || "Baharu",
+    status: (project.status || "draft") as ProjectStatus,
     progress: Number(project.progress ?? project.kemajuan ?? 0),
     tarikhCipta: project.tarikhCipta || project.created_at || "-",
   };
@@ -41,12 +52,20 @@ export default function ProjectsPage() {
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
 
+  const currentUser = useCurrentUser();
+  const canCreateProject = hasPermission(currentUser.role, "project:create");
+
   async function loadProjects() {
     try {
       setErrorMessage("");
 
-      const res = await fetch(`${API_URL}/projects`, {
+      const token = getAuthToken();
+
+      const res = await fetch(`${API_URL}/projects/`, {
         cache: "no-store",
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
       });
 
       if (!res.ok) {
@@ -67,8 +86,10 @@ export default function ProjectsPage() {
   }
 
   useEffect(() => {
+    if (!currentUser.id) return;
+
     loadProjects();
-  }, []);
+  }, [currentUser.id, currentUser.role]);
 
   return (
     <div>
@@ -76,12 +97,14 @@ export default function ProjectsPage() {
         title="Projek COCS"
         description="Senarai semua projek pembangunan dan semakan COCS."
         action={
-          <Link
-            href="/projects/new"
-            className="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-700"
-          >
-            + Cipta Projek Baru
-          </Link>
+          canCreateProject ? (
+            <Link
+              href="/projects/new"
+              className="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-700"
+            >
+              + Cipta Projek Baru
+            </Link>
+          ) : null
         }
       />
 
