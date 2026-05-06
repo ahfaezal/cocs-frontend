@@ -46,20 +46,24 @@ function slugify(value: string) {
     .replace(/^-|-$/g, "");
 }
 
-function getSessionStorageKey(projectId: string) {
-  return `cocs-ccpc-session-${projectId}`;
-}
-
-function getAIClusterStorageKey(sessionId: string) {
-  return `cocs-ccpc-ai-clusters-${sessionId}`;
-}
-
-function getCOSTargetStorageKey(projectId: string) {
-  return `cocs-target-occupation-${projectId}`;
-}
-
 function pad2(value: number) {
   return String(value).padStart(2, "0");
+}
+
+function toAIClusterResult(clusters: AIClusterResult["clusters"]): AIClusterResult {
+  const totalCards = clusters.reduce((total, cluster) => {
+    const items = (cluster as CCPCSummaryCluster).items || [];
+    return total + items.length;
+  }, 0);
+
+  return {
+    clusters,
+    unmatchedCards: [],
+    totalCards,
+    uniqueCards: totalCards,
+    suggestedClusterCount: clusters.length,
+    status: "ready",
+  };
 }
 
 function CCPCSummaryMode({
@@ -166,6 +170,7 @@ function CCPCPageContent() {
   );
   const [isRunningClustering, setIsRunningClustering] = useState(false);
   const [sessionStatus, setSessionStatus] = useState<SessionStatus>("draft");
+  const [targetInfo, setTargetInfo] = useState<COSTargetInfo | null>(null);
 
   const [projectInfo, setProjectInfo] = useState({
     title: "-",
@@ -179,20 +184,38 @@ function CCPCPageContent() {
 
   const clusters = aiClusterResult?.clusters ?? [];
 
-  const targetInfo = useMemo<COSTargetInfo | null>(() => {
-    if (!projectId || typeof window === "undefined") return null;
+  useEffect(() => {
+    if (!projectId) return;
 
-    const savedTarget = window.localStorage.getItem(
-      getCOSTargetStorageKey(projectId)
-    );
+    async function loadCOSTarget() {
+      try {
+        const token = getAuthToken();
 
-    if (!savedTarget) return null;
+        const res = await fetch(`${API_URL}/cos/structure/${projectId}`, {
+          cache: "no-store",
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        });
 
-    try {
-      return JSON.parse(savedTarget);
-    } catch {
-      return null;
+        if (!res.ok) {
+          setTargetInfo(null);
+          return;
+        }
+
+        const data = await res.json();
+        setTargetInfo(data.target || null);
+      } catch (error) {
+        console.error("Gagal load target COS dari backend:", error);
+        setTargetInfo(null);
+      }
     }
+
+    const timer = window.setTimeout(() => {
+      loadCOSTarget();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [projectId]);
 
   const standardTitle = targetInfo?.occupationTitle || projectInfo.title;
@@ -202,39 +225,47 @@ function CCPCPageContent() {
     return projectId ? `project-${projectId}-${slug}` : slug;
   }, [projectId, projectInfo.title, standardTitle]);
 
-  const clusterStorageKey = useMemo(
-    () => (sessionName ? getAIClusterStorageKey(sessionName) : ""),
-    [sessionName]
-  );
-
   const cosHref = projectId ? `/cos?projectId=${projectId}` : "/cos";
 
   useEffect(() => {
-    if (!clusterStorageKey || typeof window === "undefined") return;
+    if (!sessionName) return;
+
+    async function loadCCPCClusters() {
+      try {
+        const res = await fetch(`${API_URL}/ccpc/clusters/${sessionName}`, {
+          cache: "no-store",
+        });
+
+        if (!res.ok) {
+          setAiClusterResult(null);
+          setSelectedClusterId(null);
+          return;
+        }
+
+        const data = await res.json();
+        const backendClusters = Array.isArray(data) ? data : data.clusters || [];
+
+        if (backendClusters.length === 0) {
+          setAiClusterResult(null);
+          setSelectedClusterId(null);
+          return;
+        }
+
+        setAiClusterResult(toAIClusterResult(backendClusters));
+        setSelectedClusterId(String(backendClusters?.[0]?.id || ""));
+      } catch (error) {
+        console.error("Gagal load CCPC clusters dari backend:", error);
+        setAiClusterResult(null);
+        setSelectedClusterId(null);
+      }
+    }
 
     const timer = window.setTimeout(() => {
-      const savedResult = window.localStorage.getItem(clusterStorageKey);
-
-      if (!savedResult) {
-        setAiClusterResult(null);
-        setSelectedClusterId(null);
-        return;
-      }
-
-      try {
-        const parsed = JSON.parse(savedResult) as AIClusterResult;
-
-        setAiClusterResult(parsed);
-        setSelectedClusterId(String(parsed.clusters?.[0]?.id || ""));
-      } catch {
-        window.localStorage.removeItem(clusterStorageKey);
-        setAiClusterResult(null);
-        setSelectedClusterId(null);
-      }
+      loadCCPCClusters();
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, [clusterStorageKey]);
+  }, [sessionName]);
 
   useEffect(() => {
     if (!projectId) return;
@@ -272,7 +303,11 @@ function CCPCPageContent() {
           tahap: String(targetInfo?.level || data.level || data.tahap || "-"),
           status: data.status || "draft",
           laluanKerjaya:
-            targetInfo?.subarea || data.area || data.occupation || data.trade || "-",
+            targetInfo?.subarea ||
+            data.area ||
+            data.occupation ||
+            data.trade ||
+            "-",
         });
       } catch (error) {
         console.error("Gagal load project:", error);
@@ -282,41 +317,13 @@ function CCPCPageContent() {
     loadProject();
   }, [projectId, targetInfo?.level, targetInfo?.subarea]);
 
-  useEffect(() => {
-    if (!projectId || typeof window === "undefined") return;
-
-    const timer = window.setTimeout(() => {
-      const savedStatus = window.localStorage.getItem(
-        getSessionStorageKey(projectId)
-      ) as SessionStatus | null;
-
-      if (savedStatus === "active" || savedStatus === "closed") {
-        setSessionStatus(savedStatus);
-      } else {
-        setSessionStatus("draft");
-      }
-    }, 0);
-
-    return () => window.clearTimeout(timer);
-  }, [projectId]);
-
   function updateSessionStatus(nextStatus: SessionStatus) {
-    if (!projectId || typeof window === "undefined") return;
-
+    if (!projectId) return;
     setSessionStatus(nextStatus);
-    window.localStorage.setItem(getSessionStorageKey(projectId), nextStatus);
   }
 
   function persistAIClusterResult(nextResult: AIClusterResult | null) {
     setAiClusterResult(nextResult);
-
-    if (!clusterStorageKey || typeof window === "undefined") return;
-
-    if (nextResult) {
-      window.localStorage.setItem(clusterStorageKey, JSON.stringify(nextResult));
-    } else {
-      window.localStorage.removeItem(clusterStorageKey);
-    }
   }
 
   function handleClusterListChange(nextClusters: AIClusterResult["clusters"]) {
@@ -324,20 +331,11 @@ function CCPCPageContent() {
       setAiClusterResult((prev) => {
         if (!prev) return prev;
 
-        const nextResult: AIClusterResult = {
+        return {
           ...prev,
           clusters: nextClusters,
           suggestedClusterCount: nextClusters.length,
         };
-
-        if (clusterStorageKey && typeof window !== "undefined") {
-          window.localStorage.setItem(
-            clusterStorageKey,
-            JSON.stringify(nextResult)
-          );
-        }
-
-        return nextResult;
       });
     }, 0);
   }
@@ -518,7 +516,6 @@ function CCPCPageContent() {
           <CCPCSummaryMode clusters={clusters} />
         ) : (
           <>
-
             <CCPCStepProgress />
 
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.1fr_0.9fr]">

@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, ChevronRight, Info, Plus, Trash2 } from "lucide-react";
 
@@ -135,12 +135,61 @@ function createEmptyMatrix(): COSMatrix {
   };
 }
 
-function getStorageKey(projectId: string) {
-  return `cocs-cos-structure-${projectId}`;
+function getSelectedTarget(matrix: COSMatrix, projectId: string) {
+  if (!matrix.selectedTarget) return null;
+
+  const { level, columnIndex } = matrix.selectedTarget;
+
+  return {
+    projectId,
+    occupationTitle: matrix.levels[level]?.[columnIndex] || "",
+    subarea: matrix.subareas[columnIndex] || "",
+    level,
+    columnIndex,
+  };
 }
 
-function getTargetStorageKey(projectId: string) {
-  return `cocs-target-occupation-${projectId}`;
+async function loadCOSFromBackend(projectId: string) {
+  const token = getAuthToken();
+
+  const res = await fetch(`${API_URL}/cos/structure/${projectId}`, {
+    cache: "no-store",
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error("Gagal memuatkan struktur COS.");
+  }
+
+  return res.json() as Promise<{
+    matrix: COSMatrix | null;
+    target: unknown | null;
+  }>;
+}
+
+async function saveCOSToBackend(
+  projectId: string,
+  matrix: COSMatrix,
+  target: unknown
+) {
+  const token = getAuthToken();
+
+  const res = await fetch(`${API_URL}/cos/structure/${projectId}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ matrix, target }),
+  });
+
+  if (!res.ok) {
+    throw new Error("Gagal menyimpan struktur COS.");
+  }
+
+  return res.json();
 }
 
 function COSPageContent() {
@@ -168,11 +217,6 @@ function COSPageContent() {
 
   const [matrix, setMatrix] = useState<COSMatrix>(() => createEmptyMatrix());
   const [viewMode, setViewMode] = useState<"builder" | "document">("builder");
-
-  const storageKey = useMemo(
-    () => (projectId ? getStorageKey(projectId) : ""),
-    [projectId]
-  );
 
   useEffect(() => {
     async function loadProject() {
@@ -222,28 +266,34 @@ function COSPageContent() {
     loadProject();
   }, [projectId]);
 
-  useEffect(() => {
-    if (!storageKey) return;
+    useEffect(() => {
+      if (!projectId) return;
 
-    const saved = window.localStorage.getItem(storageKey);
+      async function loadCOSStructure() {
+        try {
+          const backendData = await loadCOSFromBackend(projectId);
 
-    if (!saved) {
-      setMatrix(createEmptyMatrix());
-      return;
-    }
+          if (backendData.matrix) {
+            setMatrix({
+              ...createEmptyMatrix(),
+              ...backendData.matrix,
+              selectedTarget: backendData.matrix.selectedTarget ?? null,
+            });
 
-    try {
-      const parsed = JSON.parse(saved);
+            return;
+          }
 
-      setMatrix({
-        ...createEmptyMatrix(),
-        ...parsed,
-        selectedTarget: parsed.selectedTarget ?? null,
-      });
-    } catch {
-      setMatrix(createEmptyMatrix());
-    }
-  }, [storageKey]);
+          setMatrix(createEmptyMatrix());
+        } catch (error) {
+          console.error("Gagal load COS dari backend:", error);
+          setErrorMessage("Gagal memuatkan struktur COS dari backend.");
+          setMatrix(createEmptyMatrix());
+        }
+      }
+
+      loadCOSStructure();
+    }, [projectId]);
+
 
   function updateSubarea(index: number, value: string) {
     setMatrix((prev) => ({
@@ -354,42 +404,29 @@ function COSPageContent() {
     ? matrix.subareas[matrix.selectedTarget.columnIndex] || ""
     : "";
 
-  function saveAndNext() {
-    if (!projectId || !storageKey) {
+  async function saveAndNext() {
+    if (!projectId) {
       setErrorMessage("Project ID tidak ditemui. Sila pilih projek dahulu.");
       return;
     }
 
-    if (!matrix.selectedTarget) {
-      setErrorMessage("Sila pilih satu jawatan sebagai Tajuk Fokus.");
+    const target = getSelectedTarget(matrix, projectId);
+
+    if (!target?.occupationTitle?.trim()) {
+      setErrorMessage("Sila pilih Tajuk Fokus sebelum meneruskan ke CCPC.");
       return;
     }
 
-    const selectedTitle =
-      matrix.levels[matrix.selectedTarget.level]?.[
-        matrix.selectedTarget.columnIndex
-      ] || "";
+    try {
+      setErrorMessage("");
 
-    if (!selectedTitle.trim()) {
-      setErrorMessage("Jawatan Tajuk Fokus tidak boleh kosong.");
-      return;
+    await saveCOSToBackend(projectId, matrix, target);
+
+      router.push(`/ccpc?projectId=${projectId}`);
+    } catch (error) {
+      console.error("Gagal simpan COS:", error);
+      setErrorMessage("Gagal menyimpan struktur COS ke backend.");
     }
-
-    const targetPayload = {
-      projectId,
-      occupationTitle: selectedTitle.trim(),
-      subarea: selectedTargetSubarea,
-      level: matrix.selectedTarget.level,
-      columnIndex: matrix.selectedTarget.columnIndex,
-    };
-
-    window.localStorage.setItem(storageKey, JSON.stringify(matrix));
-    window.localStorage.setItem(
-      getTargetStorageKey(projectId),
-      JSON.stringify(targetPayload)
-    );
-
-    router.push(`/ccpc?projectId=${projectId}`);
   }
 
   if (!projectId) {

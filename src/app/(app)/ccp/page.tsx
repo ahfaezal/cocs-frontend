@@ -74,8 +74,6 @@ type StoredCluster = {
   finalised?: boolean;
 };
 
-type StoredClusterPayload = StoredCluster[] | { clusters?: StoredCluster[] };
-
 type ProjectResponse = {
   id?: string | number;
   project_code?: string;
@@ -98,11 +96,6 @@ type CCPGenerateResult = {
   workSteps: string[];
   performanceCriteria: string[];
   generatedAt?: string;
-};
-
-const EMPTY_UNIT_PROFILE: CCPUnitProfile = {
-  workSteps: [""],
-  performanceCriteria: [""],
 };
 
 const EMPTY_COMPETENCY_PROFILE: CCPCompetencyProfile = {
@@ -128,39 +121,6 @@ function slugify(value: string) {
 
 function pad(value: number) {
   return String(value).padStart(2, "0");
-}
-
-function getTargetStorageKey(projectId: string) {
-  return `cocs-target-occupation-${projectId}`;
-}
-
-function getClusterStorageKeys(projectId: string, title: string) {
-  const titleSlug = slugify(title);
-  const keys = [
-    titleSlug ? `cocs-ccpc-ai-clusters-project-${projectId}-${titleSlug}` : "",
-    titleSlug ? `cocs-ccpc-ai-clusters-${titleSlug}` : "",
-    titleSlug ? `cocs-ccpc-ai-clusters-${projectId}-${titleSlug}` : "",
-    projectId ? `cocs-ccpc-clusters-${projectId}` : "",
-  ];
-
-  return Array.from(new Set(keys.filter(Boolean)));
-}
-
-function getProfileStorageKey(projectId: string) {
-  return `cocs-ccp-profile-${projectId}`;
-}
-
-function readJson<T>(key: string): T | null {
-  if (typeof window === "undefined" || !key) return null;
-
-  const saved = window.localStorage.getItem(key);
-  if (!saved) return null;
-
-  try {
-    return JSON.parse(saved) as T;
-  } catch {
-    return null;
-  }
 }
 
 function cleanText(value: unknown) {
@@ -231,10 +191,16 @@ function extractClusterItems(cluster: StoredCluster) {
     .filter(Boolean);
 }
 
-function extractStoredClusters(payload: StoredClusterPayload | null) {
+function extractStoredClusters(payload: unknown) {
   if (!payload) return [];
 
-  return Array.isArray(payload) ? payload : payload.clusters ?? [];
+  if (Array.isArray(payload)) return payload as StoredCluster[];
+
+  if (isRecord(payload) && Array.isArray(payload.clusters)) {
+    return payload.clusters as StoredCluster[];
+  }
+
+  return [];
 }
 
 function getUsableClusters(clusters: StoredCluster[]) {
@@ -315,6 +281,45 @@ function normalizeProfiles(raw: unknown, competencies: Competency[]): CCPProfile
   }
 
   return nextProfiles;
+}
+
+async function loadCCPProfileFromBackend(projectId: string) {
+  const token = getAuthToken();
+
+  const res = await fetch(`${API_URL}/ccp/profile/${projectId}`, {
+    cache: "no-store",
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error("Gagal memuatkan profil CCP.");
+  }
+
+  return res.json() as Promise<{ profiles?: unknown }>;
+}
+
+async function saveCCPProfileToBackend(
+  projectId: string,
+  profiles: CCPProfiles
+) {
+  const token = getAuthToken();
+
+  const res = await fetch(`${API_URL}/ccp/profile/${projectId}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ profiles }),
+  });
+
+  if (!res.ok) {
+    throw new Error("Gagal menyimpan profil CCP.");
+  }
+
+  return res.json();
 }
 
 function isUnitGenerated(profile?: CCPUnitProfile) {
@@ -516,15 +521,12 @@ function CCPPageContent() {
     subarea: "-",
   });
 
-  const clusterStorageKeys = useMemo(() => {
-    if (!projectId || projectInfo.title === "-") return [];
-    return getClusterStorageKeys(projectId, projectInfo.title);
-  }, [projectId, projectInfo.title]);
+  const sessionName = useMemo(() => {
+    if (!projectId || projectInfo.title === "-") return "";
 
-  const profileStorageKey = useMemo(
-    () => (projectId ? getProfileStorageKey(projectId) : ""),
-    [projectId]
-  );
+    const titleSlug = slugify(projectInfo.title || "dacum-session");
+    return `project-${projectId}-${titleSlug}`;
+  }, [projectId, projectInfo.title]);
 
   const competencies = useMemo(
     () => buildCompetenciesFromClusters(clusters),
@@ -558,8 +560,24 @@ function CCPPageContent() {
         setLoading(true);
         setErrorMessage("");
 
-        const target = readJson<StoredTarget>(getTargetStorageKey(projectId));
         const token = getAuthToken();
+        let target: StoredTarget | null = null;
+
+        try {
+          const cosRes = await fetch(`${API_URL}/cos/structure/${projectId}`, {
+            cache: "no-store",
+            headers: {
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+          });
+
+          if (cosRes.ok) {
+            const cosData = await cosRes.json();
+            target = cosData.target || null;
+          }
+        } catch (error) {
+          console.error("Gagal load target COS untuk CCP:", error);
+        }
 
         const res = await fetch(`${API_URL}/projects/${projectId}`, {
           cache: "no-store",
@@ -603,23 +621,49 @@ function CCPPageContent() {
   }, [projectId]);
 
   useEffect(() => {
-    if (clusterStorageKeys.length === 0) return;
+    if (!sessionName) return;
 
-    const savedPayload =
-      clusterStorageKeys
-        .map((key) => readJson<StoredClusterPayload>(key))
-        .find((payload) => extractStoredClusters(payload).length > 0) ?? null;
+    async function loadCCPCClusters() {
+      try {
+        const res = await fetch(`${API_URL}/ccpc/clusters/${sessionName}`, {
+          cache: "no-store",
+        });
 
-    const nextClusters = getUsableClusters(extractStoredClusters(savedPayload));
-    queueMicrotask(() => setClusters(nextClusters));
-  }, [clusterStorageKeys]);
+        if (!res.ok) {
+          setClusters([]);
+          return;
+        }
+
+        const payload = await res.json();
+        const nextClusters = getUsableClusters(extractStoredClusters(payload));
+        setClusters(nextClusters);
+      } catch (error) {
+        console.error("Gagal load CCPC clusters untuk CCP:", error);
+        setClusters([]);
+      }
+    }
+
+    loadCCPCClusters();
+  }, [sessionName]);
 
   useEffect(() => {
-    if (!profileStorageKey || competencies.length === 0) return;
+    if (!projectId || competencies.length === 0) {
+      queueMicrotask(() => setProfiles({}));
+      return;
+    }
 
-    const saved = readJson<unknown>(profileStorageKey);
-    queueMicrotask(() => setProfiles(normalizeProfiles(saved, competencies)));
-  }, [competencies, profileStorageKey]);
+    async function loadProfiles() {
+      try {
+        const data = await loadCCPProfileFromBackend(projectId);
+        setProfiles(normalizeProfiles(data.profiles, competencies));
+      } catch (error) {
+        console.error("Gagal load profil CCP dari backend:", error);
+        setProfiles(normalizeProfiles(null, competencies));
+      }
+    }
+
+    loadProfiles();
+  }, [competencies, projectId]);
 
   useEffect(() => {
     if (!selectedCompetencyCode && competencies.length > 0) {
@@ -630,8 +674,10 @@ function CCPPageContent() {
   function persistProfiles(nextProfiles: CCPProfiles) {
     setProfiles(nextProfiles);
 
-    if (profileStorageKey) {
-      window.localStorage.setItem(profileStorageKey, JSON.stringify(nextProfiles));
+    if (projectId) {
+      void saveCCPProfileToBackend(projectId, nextProfiles).catch((error) => {
+        console.error("Gagal simpan profil CCP ke backend:", error);
+      });
     }
   }
 
@@ -890,109 +936,6 @@ async function generateDescriptor() {
       setGeneratingCode(null);
     }
 }
-
-  async function generateSelectedCompetency() {
-    if (!selectedCompetency) return;
-
-    try {
-      setErrorMessage("");
-      let nextProfiles = { ...profiles };
-      let descriptor = normalizeCompetencyProfile(
-        nextProfiles[selectedCompetency.code]
-      ).descriptor;
-
-      for (const unit of selectedCompetency.units) {
-        setGeneratingCode(unit.unitCode);
-
-        const generated = await requestAIProfile(unit);
-        if (!descriptor) descriptor = generated.descriptor;
-
-        const currentProfile = normalizeCompetencyProfile(
-          nextProfiles[selectedCompetency.code]
-        );
-
-        nextProfiles = {
-          ...nextProfiles,
-          [selectedCompetency.code]: {
-            ...currentProfile,
-            descriptor,
-            units: {
-              ...currentProfile.units,
-              [unit.unitCode]: normalizeUnitProfile({
-                workSteps: generated.workSteps,
-                performanceCriteria: generated.performanceCriteria,
-                generatedAt: generated.generatedAt,
-              }),
-            },
-            generatedAt: new Date().toISOString(),
-          },
-        };
-
-        persistProfiles(nextProfiles);
-      }
-
-      setMessage("Semua WA untuk CC terpilih berjaya dijana.");
-      setTimeout(() => setMessage(""), 2500);
-    } catch (error) {
-      console.error("Gagal jana CC:", error);
-      setErrorMessage("Gagal menjana semua WA untuk CC terpilih.");
-    } finally {
-      setGeneratingCode(null);
-    }
-  }
-
-  async function generateAllCompetencies() {
-    if (competencies.length === 0) return;
-
-    try {
-      setErrorMessage("");
-      let nextProfiles = { ...profiles };
-
-      for (const competency of competencies) {
-        let descriptor = normalizeCompetencyProfile(
-          nextProfiles[competency.code]
-        ).descriptor;
-
-        for (const unit of competency.units) {
-          setGeneratingCode(unit.unitCode);
-
-          const generated = await requestAIProfile(unit);
-          if (!descriptor) descriptor = generated.descriptor;
-
-          const currentProfile = normalizeCompetencyProfile(
-            nextProfiles[competency.code]
-          );
-
-          nextProfiles = {
-            ...nextProfiles,
-            [competency.code]: {
-              ...currentProfile,
-              descriptor,
-              units: {
-                ...currentProfile.units,
-                [unit.unitCode]: normalizeUnitProfile({
-                  workSteps: generated.workSteps,
-                  performanceCriteria: generated.performanceCriteria,
-                  generatedAt: generated.generatedAt,
-                }),
-              },
-              generatedAt: new Date().toISOString(),
-            },
-          };
-
-          persistProfiles(nextProfiles);
-        }
-      }
-
-      setMessage("Semua maklumat CCP berjaya dijana.");
-      setTimeout(() => setMessage(""), 2500);
-    } catch (error) {
-      console.error("Gagal jana semua CCP:", error);
-      setErrorMessage("Gagal menjana semua CCP. Cuba jana satu CC dahulu.");
-    } finally {
-      setGeneratingCode(null);
-    }
-  }
 
   function saveDraft() {
     persistProfiles(profiles);
