@@ -1,22 +1,215 @@
-import type { Metadata } from "next";
+"use client";
+
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import {
-  ChevronRight,
-  Info,
-  Save,
-  ArrowRight,
   ArrowLeft,
+  ArrowRight,
+  ChevronRight,
   Eye,
   FileText,
+  Info,
+  Save,
 } from "lucide-react";
-import { CSPStructureSidebar } from "@/components/csp/csp-structure-sidebar";
-import { CSPDocumentHeader } from "@/components/csp/csp-document-header";
 
-export const metadata: Metadata = {
-  title: "Standard Practice (CSP)",
+import { CSPDocumentHeader } from "@/components/csp/csp-document-header";
+import { CSPStructureSidebar } from "@/components/csp/csp-structure-sidebar";
+import { getAuthToken } from "@/lib/auth";
+import { API_URL } from "@/lib/env";
+
+type ProjectInfo = {
+  id: string;
+  code: string;
+  title: string;
+  sector: string;
+  subsector: string;
+  area: string;
+  subarea: string;
+  level: string;
+  status: string;
 };
 
-export default function CSPPage() {
+type COSTargetInfo = {
+  occupationTitle?: string;
+  subarea?: string;
+  level?: number;
+};
+
+function formatLevel(level: string) {
+  return level && level !== "-" ? `Tahap ${level}` : "-";
+}
+
+function CSPDocumentMode({
+  projectInfo,
+  standardTitle,
+  standardLevel,
+  careerPath,
+}: {
+  projectInfo: ProjectInfo;
+  standardTitle: string;
+  standardLevel: string;
+  careerPath: string;
+}) {
+  return (
+    <div className="space-y-6 rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+      <section className="min-h-[520px] border border-slate-300 p-8 text-center">
+        <div className="text-sm font-semibold text-slate-700">
+          Lembaga Pembangunan Industri Pembinaan Malaysia (CIDB)
+        </div>
+
+        <div className="mt-20 text-xl font-bold uppercase text-slate-900">
+          Construction Occupational Competency Standard
+        </div>
+        <div className="mt-2 text-sm text-slate-600">
+          Standard Kompetensi Pekerjaan Pembinaan
+        </div>
+
+        <div className="mt-16 text-sm font-bold text-slate-700">KOD COCS</div>
+        <div className="mt-3 text-lg font-bold text-slate-900">
+          {projectInfo.code}
+        </div>
+
+        <div className="mt-14 text-2xl font-bold uppercase text-slate-900">
+          {standardTitle}
+        </div>
+        <div className="mt-3 text-lg font-semibold uppercase text-slate-700">
+          {careerPath}
+        </div>
+        <div className="mt-10 text-xl font-bold uppercase text-slate-900">
+          {formatLevel(standardLevel)}
+        </div>
+      </section>
+
+      <section className="border border-slate-300 p-6">
+        <h2 className="text-lg font-bold text-slate-900">Maklumat Dokumen</h2>
+        <table className="mt-4 w-full border border-black text-sm text-black">
+          <tbody>
+            <tr>
+              <th className="w-48 border border-black bg-slate-200 px-3 py-2 text-left">
+                Section
+              </th>
+              <td className="border border-black px-3 py-2">
+                {projectInfo.sector}
+              </td>
+            </tr>
+            <tr>
+              <th className="border border-black bg-slate-200 px-3 py-2 text-left">
+                Group
+              </th>
+              <td className="border border-black px-3 py-2">
+                {projectInfo.subsector}
+              </td>
+            </tr>
+            <tr>
+              <th className="border border-black bg-slate-200 px-3 py-2 text-left">
+                Area
+              </th>
+              <td className="border border-black px-3 py-2">
+                {projectInfo.area || "-"}
+              </td>
+            </tr>
+            <tr>
+              <th className="border border-black bg-slate-200 px-3 py-2 text-left">
+                COCS Title
+              </th>
+              <td className="border border-black px-3 py-2">{standardTitle}</td>
+            </tr>
+            <tr>
+              <th className="border border-black bg-slate-200 px-3 py-2 text-left">
+                COCS Level
+              </th>
+              <td className="border border-black px-3 py-2">
+                {formatLevel(standardLevel)}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </div>
+  );
+}
+
+function CSPPageContent() {
+  const searchParams = useSearchParams();
+  const projectId = searchParams.get("projectId") || "";
+
+  const [viewMode, setViewMode] = useState<"builder" | "document">("builder");
+  const [targetInfo, setTargetInfo] = useState<COSTargetInfo | null>(null);
+  const [projectInfo, setProjectInfo] = useState<ProjectInfo>({
+    id: "",
+    code: "-",
+    title: "-",
+    sector: "-",
+    subsector: "-",
+    area: "-",
+    subarea: "",
+    level: "-",
+    status: "draft",
+  });
+
+  useEffect(() => {
+    if (!projectId) return;
+
+    async function loadCSPBaseData() {
+      const token = getAuthToken();
+      const headers = {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
+
+      try {
+        const projectRes = await fetch(`${API_URL}/projects/${projectId}`, {
+          cache: "no-store",
+          headers,
+        });
+
+        if (projectRes.ok) {
+          const data = await projectRes.json();
+
+          setProjectInfo({
+            id: String(data.id || projectId),
+            code: data.project_code || data.code || `COCS/${data.id}`,
+            title: data.project_title || data.title || "-",
+            sector: data.sector_name || data.sector || "-",
+            subsector: data.subsector_name || data.subsector || "-",
+            area: data.area || "-",
+            subarea: data.subarea || "",
+            level: String(data.level || data.tahap || "-"),
+            status: data.status || "draft",
+          });
+        }
+
+        const cosRes = await fetch(`${API_URL}/cos/structure/${projectId}`, {
+          cache: "no-store",
+          headers,
+        });
+
+        if (cosRes.ok) {
+          const data = await cosRes.json();
+          setTargetInfo(data.target || null);
+        }
+      } catch (error) {
+        console.error("Gagal load data asas CSP:", error);
+      }
+    }
+
+    loadCSPBaseData();
+  }, [projectId]);
+
+  const standardTitle = targetInfo?.occupationTitle || projectInfo.title;
+  const standardLevel = String(targetInfo?.level || projectInfo.level || "-");
+  const careerPath = useMemo(
+    () =>
+      targetInfo?.subarea ||
+      projectInfo.subarea ||
+      projectInfo.area ||
+      projectInfo.subsector ||
+      "-",
+    [projectInfo.area, projectInfo.subarea, projectInfo.subsector, targetInfo]
+  );
+  const ccpHref = projectId ? `/ccp?projectId=${projectId}` : "/ccp";
+  const cccHref = projectId ? `/ccc?projectId=${projectId}` : "/ccc";
+
   return (
     <div className="space-y-6">
       <div className="rounded-2xl border border-slate-200 bg-white px-6 py-4 shadow-sm">
@@ -24,14 +217,14 @@ export default function CSPPage() {
           <div className="flex flex-wrap items-center gap-3 text-sm">
             <span className="text-slate-500">Projek:</span>
             <span className="text-2xl font-bold text-blue-700">
-              COCS/2024/001 – Bricklayer (Wet Trade) Level 3
+              {projectInfo.code} - {standardTitle}
             </span>
           </div>
 
           <div className="flex items-center gap-3">
             <span className="text-sm text-slate-500">Status:</span>
             <span className="rounded-full bg-blue-100 px-3 py-1 text-sm font-semibold text-blue-700">
-              Dalam Pembangunan
+              {projectInfo.status}
             </span>
           </div>
         </div>
@@ -66,6 +259,32 @@ export default function CSPPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
+            <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
+              <button
+                type="button"
+                onClick={() => setViewMode("builder")}
+                className={`rounded-lg px-5 py-2 text-sm font-semibold ${
+                  viewMode === "builder"
+                    ? "bg-blue-600 text-white"
+                    : "text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                Builder Mode
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setViewMode("document")}
+                className={`rounded-lg px-5 py-2 text-sm font-semibold ${
+                  viewMode === "document"
+                    ? "bg-blue-600 text-white"
+                    : "text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                Document Mode
+              </button>
+            </div>
+
             <button className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 font-medium text-slate-700 transition hover:bg-slate-50">
               <FileText size={16} />
               Salin dari Templat
@@ -85,125 +304,152 @@ export default function CSPPage() {
       </div>
 
       <CSPDocumentHeader
-        bidangPekerjaan="Bricklaying (Wet Trade)"
-        tahap="3"
-        laluanKerjaya="Kerja Batu dan Konkrit"
-        tarikhKemaskini="20 Mei 2024"
+        bidangPekerjaan={standardTitle}
+        tahap={standardLevel}
+        laluanKerjaya={careerPath}
+        tarikhKemaskini={new Date().toLocaleDateString("ms-MY")}
         versiDokumen="0.1 (Draf)"
       />
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
-        <CSPStructureSidebar />
+      {viewMode === "document" ? (
+        <CSPDocumentMode
+          projectInfo={projectInfo}
+          standardTitle={standardTitle}
+          standardLevel={standardLevel}
+          careerPath={careerPath}
+        />
+      ) : (
+        <>
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
+            <CSPStructureSidebar />
 
-        <div className="space-y-6">
-          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-200 px-6 py-5">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-xl font-bold text-blue-700">
-                    1. Pengenalan
-                  </h2>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Lengkapkan seksyen pengenalan bagi dokumen CSP.
-                  </p>
+            <div className="space-y-6">
+              <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-200 px-6 py-5">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h2 className="text-xl font-bold text-blue-700">
+                        1. Pengenalan
+                      </h2>
+                      <p className="mt-1 text-sm text-slate-500">
+                        Lengkapkan seksyen pengenalan bagi dokumen CSP.
+                      </p>
+                    </div>
+
+                    <span className="rounded-full bg-emerald-100 px-3 py-1 text-sm font-semibold text-emerald-700">
+                      Draf CSP
+                    </span>
+                  </div>
                 </div>
 
-                <span className="rounded-full bg-emerald-100 px-3 py-1 text-sm font-semibold text-emerald-700">
-                  Disimpan 10:42 AM
-                </span>
-              </div>
-            </div>
+                <div className="space-y-6 px-6 py-6">
+                  <div>
+                    <label className="mb-2 block text-sm font-semibold text-slate-700">
+                      Latar Belakang
+                    </label>
+                    <textarea
+                      className="min-h-[160px] w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                      defaultValue={`Industri pembinaan di Malaysia memainkan peranan penting dalam pembangunan infrastruktur dan kemudahan awam serta swasta. ${standardTitle} merupakan pekerjaan dalam ${projectInfo.subsector} yang memerlukan kompetensi selaras dengan struktur pekerjaan, tahap kemahiran dan keperluan industri.`}
+                    />
+                  </div>
 
-            <div className="space-y-6 px-6 py-6">
-              <div>
-                <label className="mb-2 block text-sm font-semibold text-slate-700">
-                  Latar Belakang
-                </label>
-                <textarea
-                  className="min-h-[160px] w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                  defaultValue="Industri pembinaan di Malaysia memainkan peranan yang sangat penting dalam pembangunan infrastruktur dan kemudahan awam serta swasta. Kerja batu dan konkrit merupakan antara kemahiran teras yang diperlukan dalam pelaksanaan projek pembinaan struktur."
-                />
+                  <div>
+                    <label className="mb-2 block text-sm font-semibold text-slate-700">
+                      Industry Overview
+                    </label>
+                    <textarea
+                      className="min-h-[140px] w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                      defaultValue={`Sektor ${projectInfo.sector} merangkumi bidang ${projectInfo.subsector}. Pembangunan standard bagi ${standardTitle} membantu memastikan tenaga kerja mempunyai pengetahuan, kemahiran dan amalan kerja yang konsisten dengan keperluan semasa industri pembinaan.`}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-sm font-semibold text-slate-700">
+                      Occupational Definition
+                    </label>
+                    <textarea
+                      className="min-h-[140px] w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                      defaultValue={`${standardTitle} ${formatLevel(standardLevel)} ialah personel yang melaksanakan aktiviti kerja dalam ${careerPath} mengikut prosedur, spesifikasi, keperluan keselamatan dan standard kualiti yang ditetapkan.`}
+                    />
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <label className="mb-2 block text-sm font-semibold text-slate-700">
-                  Industry Overview
-                </label>
-                <textarea
-                  className="min-h-[140px] w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                  defaultValue="Sektor pembinaan sentiasa berkembang seiring dengan peningkatan projek pembangunan di seluruh negara. Permintaan terhadap tenaga kerja mahir bagi kerja bata dan konkrit adalah tinggi terutamanya dalam projek bangunan, jambatan, struktur bertetulang dan kemudahan infrastruktur lain."
-                />
+              <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-200 px-6 py-5">
+                  <h2 className="text-xl font-bold text-blue-700">
+                    Panduan CSP
+                  </h2>
+                </div>
+
+                <div className="space-y-3 px-6 py-6 text-sm text-slate-700">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    Lengkapkan setiap seksyen mengikut struktur Standard Practice
+                    COCS.
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    Kandungan dalam CSP hendaklah konsisten dengan COS, CCPC dan
+                    CCP yang telah disahkan.
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    Gunakan bahasa formal, deskriptif, dan selari dengan
+                    keperluan badan kawalselia.
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <label className="mb-2 block text-sm font-semibold text-slate-700">
-                  Occupational Definition
-                </label>
-                <textarea
-                  className="min-h-[140px] w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                  defaultValue="Bricklayer (Wet Trade) Tahap 3 ialah pekerja yang melaksanakan kerja pasangan bata, blok dan kerja konkrit mengikut lukisan, spesifikasi dan prosedur kerja yang telah ditetapkan dengan tahap kesukaran sederhana serta pengawasan minimum."
-                />
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <Link
+                  href={ccpHref}
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-5 py-3 font-medium text-slate-700 transition hover:bg-slate-50"
+                >
+                  <ArrowLeft size={16} />
+                  Kembali ke CCP
+                </Link>
+
+                <div className="flex flex-wrap gap-3">
+                  <button className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 font-semibold text-slate-700 transition hover:bg-slate-50">
+                    <Save size={16} />
+                    Simpan Draf
+                  </button>
+
+                  <Link
+                    href={cccHref}
+                    className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white transition hover:bg-blue-700"
+                  >
+                    Seterusnya: CCC
+                    <ArrowRight size={16} />
+                  </Link>
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-200 px-6 py-5">
-              <h2 className="text-xl font-bold text-blue-700">
-                Panduan CSP
-              </h2>
-            </div>
-
-            <div className="space-y-3 px-6 py-6 text-sm text-slate-700">
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                Lengkapkan setiap seksyen mengikut struktur Standard Practice COCS.
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                Kandungan dalam CSP hendaklah konsisten dengan COS, CCPC dan CCP
-                yang telah disahkan.
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                Gunakan bahasa formal, deskriptif, dan selari dengan keperluan
-                badan kawalselia.
-              </div>
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4">
+            <div className="text-sm leading-6 text-slate-700">
+              <span className="font-semibold">Nota:</span> Fasa awal CSP memberi
+              fokus kepada struktur dokumen dan pengisian kandungan mengikut
+              seksyen. Pada langkah seterusnya, kita boleh tambah editor yang
+              lebih maju dan integrasi AI untuk membantu cadangan kandungan
+              setiap seksyen.
             </div>
           </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <Link
-              href="/ccp"
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-5 py-3 font-medium text-slate-700 transition hover:bg-slate-50"
-            >
-              <ArrowLeft size={16} />
-              Kembali ke CCP
-            </Link>
-
-            <div className="flex flex-wrap gap-3">
-              <button className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 font-semibold text-slate-700 transition hover:bg-slate-50">
-                <Save size={16} />
-                Simpan Draf
-              </button>
-
-              <Link
-                href="/ccc"
-                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white transition hover:bg-blue-700"
-              >
-                Seterusnya: CCC
-                <ArrowRight size={16} />
-              </Link>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4">
-        <div className="text-sm leading-6 text-slate-700">
-          <span className="font-semibold">Nota:</span> Fasa awal CSP memberi
-          fokus kepada struktur dokumen dan pengisian kandungan mengikut seksyen.
-          Pada langkah seterusnya, kita boleh tambah editor yang lebih maju dan
-          integrasi AI untuk membantu cadangan kandungan setiap seksyen.
-        </div>
-      </div>
+        </>
+      )}
     </div>
+  );
+}
+
+export default function CSPPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
+          Memuatkan halaman CSP...
+        </div>
+      }
+    >
+      <CSPPageContent />
+    </Suspense>
   );
 }
