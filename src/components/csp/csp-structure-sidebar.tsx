@@ -1,17 +1,11 @@
 const cspSections = [
-  { no: 1, title: "Pengenalan", active: true },
-  { no: 2, title: "Rasional Pembangunan COCS" },
-  { no: 3, title: "Rasional Struktur Pekerjaan" },
-  { no: 4, title: "Keperluan Badan Kawalselia" },
-  { no: 5, title: "Prasyarat Umum Pekerjaan" },
-  { no: 6, title: "Struktur Pekerjaan (COS)" },
-  { no: 7, title: "Definisi Tahap" },
-  { no: 8, title: "Kompetensi Pekerjaan" },
-  { no: 9, title: "Kondisi Kerja" },
-  { no: 10, title: "Prospek Pekerjaan" },
-  { no: 11, title: "Peluang Peningkatan Kemahiran" },
-  { no: 12, title: "Organisasi Rujukan" },
-  { no: 13, title: "Jawatankuasa" },
+  { no: 1, title: "Front Page & Maklumat Dokumen", active: true },
+  { no: 2, title: "Construction Occupational Structure (COS)" },
+  { no: 3, title: "Definition of Competency Levels" },
+  { no: 4, title: "Occupational Competencies" },
+  { no: 5, title: "Organisation Reference" },
+  { no: 6, title: "Technical Evaluation Committee" },
+  { no: 7, title: "Standard Development Committee" },
 ];
 
 export function CSPStructureSidebar() {
