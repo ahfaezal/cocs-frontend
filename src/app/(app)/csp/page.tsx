@@ -36,6 +36,13 @@ type COSTargetInfo = {
   level?: number;
 };
 
+type COSMatrix = {
+  subareas: string[];
+  levels: Record<number, string[]>;
+};
+
+const LEVELS = [6, 5, 4, 3, 2, 1];
+
 function formatLevel(level: string) {
   return level && level !== "-" ? `Tahap ${level}` : "-";
 }
@@ -45,11 +52,13 @@ function CSPDocumentMode({
   standardTitle,
   standardLevel,
   careerPath,
+  matrix,
 }: {
   projectInfo: ProjectInfo;
   standardTitle: string;
   standardLevel: string;
   careerPath: string;
+  matrix: COSMatrix | null;
 }) {
   return (
     <div className="space-y-6 rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
@@ -126,6 +135,90 @@ function CSPDocumentMode({
           </tbody>
         </table>
       </section>
+
+      <section className="border border-slate-300 p-6">
+        <h2 className="text-lg font-bold text-slate-900">
+          2.2 Construction Occupational Structure (COS)
+        </h2>
+
+        {matrix ? (
+          <div className="mt-4 overflow-x-auto">
+            <table className="min-w-full border border-black text-sm text-black">
+              <tbody>
+                <tr>
+                  <th className="w-36 border border-black bg-slate-200 px-3 py-2 text-left">
+                    Sector
+                  </th>
+                  <td
+                    colSpan={matrix.subareas.length}
+                    className="border border-black px-3 py-2 text-center font-semibold"
+                  >
+                    {projectInfo.sector}
+                  </td>
+                </tr>
+
+                <tr>
+                  <th className="border border-black bg-slate-200 px-3 py-2 text-left">
+                    Sub Sector
+                  </th>
+                  <td
+                    colSpan={matrix.subareas.length}
+                    className="border border-black px-3 py-2 text-center font-semibold"
+                  >
+                    {projectInfo.subsector}
+                  </td>
+                </tr>
+
+                <tr>
+                  <th className="border border-black bg-slate-200 px-3 py-2 text-left">
+                    Area
+                  </th>
+                  <td
+                    colSpan={matrix.subareas.length}
+                    className="border border-black px-3 py-2 text-center font-semibold"
+                  >
+                    {projectInfo.area || "-"}
+                  </td>
+                </tr>
+
+                <tr>
+                  <th className="border border-black bg-slate-200 px-3 py-2 text-left">
+                    Subarea
+                  </th>
+                  {matrix.subareas.map((subarea, index) => (
+                    <td
+                      key={`csp-doc-subarea-${index}`}
+                      className="border border-black px-3 py-2 text-center font-semibold"
+                    >
+                      {subarea || `Subarea ${index + 1}`}
+                    </td>
+                  ))}
+                </tr>
+
+                {LEVELS.map((level) => (
+                  <tr key={`csp-doc-level-${level}`}>
+                    <th className="border border-black px-3 py-2 text-left">
+                      Level {level}
+                    </th>
+                    {matrix.levels[level]?.map((value, columnIndex) => (
+                      <td
+                        key={`csp-doc-level-${level}-${columnIndex}`}
+                        className="border border-black px-3 py-2 text-center"
+                      >
+                        {value || "-"}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
+            Struktur COS belum tersedia untuk projek ini.
+          </div>
+        )}
+      </section>
     </div>
   );
 }
@@ -136,6 +229,7 @@ function CSPPageContent() {
 
   const [viewMode, setViewMode] = useState<"builder" | "document">("builder");
   const [targetInfo, setTargetInfo] = useState<COSTargetInfo | null>(null);
+  const [matrix, setMatrix] = useState<COSMatrix | null>(null);
   const [projectInfo, setProjectInfo] = useState<ProjectInfo>({
     id: "",
     code: "-",
@@ -187,6 +281,7 @@ function CSPPageContent() {
         if (cosRes.ok) {
           const data = await cosRes.json();
           setTargetInfo(data.target || null);
+          setMatrix(data.matrix || null);
         }
       } catch (error) {
         console.error("Gagal load data asas CSP:", error);
@@ -317,6 +412,7 @@ function CSPPageContent() {
           standardTitle={standardTitle}
           standardLevel={standardLevel}
           careerPath={careerPath}
+          matrix={matrix}
         />
       ) : (
         <>
