@@ -14,7 +14,7 @@ import type { ProjectItem } from "@/types/project";
 
 export function ProjectTable({ projects }: { projects: ProjectItem[] }) {
   const currentUser = useCurrentUser();
-  const [openMenuId, setOpenMenuId] = useState<number | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | number | null>(null);
 
   const canEditProject = hasPermission(
     currentUser.role,
