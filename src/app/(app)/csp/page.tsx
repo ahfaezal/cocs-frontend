@@ -675,11 +675,15 @@ function CSPBuilderSectionPanel({
   standardTitle,
   standardLevel,
   careerPath,
+  sector,
+  subsector,
 }: {
   section: CSPBuilderSectionDetail;
   standardTitle: string;
   standardLevel: string;
   careerPath: string;
+  sector: string;
+  subsector: string;
 }) {
   const defaultDraft =
     section.kind === "manual"
@@ -687,6 +691,45 @@ function CSPBuilderSectionPanel({
           standardLevel
         )} dalam ${careerPath}.`
       : "";
+  const [content, setContent] = useState(defaultDraft);
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  async function handleGenerateAI() {
+    try {
+      setIsGenerating(true);
+
+      const res = await fetch("/api/csp/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          sectionTitle: section.title,
+          sectionDescription: section.description,
+          standardTitle,
+          standardLevel,
+          careerPath,
+          sector,
+          subsector,
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Gagal menjana kandungan CSP.");
+      }
+
+      const data = (await res.json()) as { content?: string };
+
+      if (data.content) {
+        setContent(data.content);
+      }
+    } catch (error) {
+      console.error("Gagal jana AI CSP:", error);
+      alert("Gagal menjana kandungan CSP.");
+    } finally {
+      setIsGenerating(false);
+    }
+  }
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -724,15 +767,18 @@ function CSPBuilderSectionPanel({
           <>
             <textarea
               className="min-h-[220px] w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-              defaultValue={defaultDraft}
+              value={content}
+              onChange={(event) => setContent(event.target.value)}
             />
 
             <div className="flex justify-end">
               <button
                 type="button"
-                className="rounded-xl border border-blue-200 px-4 py-2.5 text-sm font-semibold text-blue-700 transition hover:bg-blue-50"
+                onClick={handleGenerateAI}
+                disabled={isGenerating}
+                className="rounded-xl border border-blue-200 px-4 py-2.5 text-sm font-semibold text-blue-700 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Jana AI
+                {isGenerating ? "Menjana..." : "Jana AI"}
               </button>
             </div>
           </>
@@ -1060,10 +1106,13 @@ function CSPPageContent() {
 
             <div className="space-y-6">
               <CSPBuilderSectionPanel
+                key={activeBuilderSection}
                 section={activeBuilderDetail}
                 standardTitle={standardTitle}
                 standardLevel={standardLevel}
                 careerPath={careerPath}
+                sector={projectInfo.sector}
+                subsector={projectInfo.subsector}
               />
 
               <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
