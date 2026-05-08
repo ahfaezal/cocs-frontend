@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { Eye, Pencil, MoreVertical, Trash2 } from "lucide-react";
 
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -94,10 +94,8 @@ export function ProjectTable({ projects }: { projects: ProjectItem[] }) {
                   item.subsectorName || item.bidangTred || item.subsector || "-";
 
                 return (
-                  <tr
-                    key={item.id}
-                    className="border-b border-slate-100 transition hover:bg-slate-50"
-                  >
+                  <Fragment key={item.id}>
+                    <tr className="border-b border-slate-100 transition hover:bg-slate-50">
                     <td className="px-4 py-4">{index + 1}</td>
 
                     <td className="px-4 py-4 font-medium text-slate-800">
@@ -168,46 +166,52 @@ export function ProjectTable({ projects }: { projects: ProjectItem[] }) {
                           </button>
                         ) : null}
 
-                        <div className="relative">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setOpenMenuId((current) =>
-                                current === item.id ? null : item.id
-                              )
-                            }
-                            className="rounded-lg border border-slate-200 p-2 hover:bg-slate-100"
-                            title="Lagi tindakan"
-                          >
-                            <MoreVertical size={16} />
-                          </button>
-
-                          {openMenuId === item.id ? (
-                            <div className="absolute right-0 z-20 mt-2 w-44 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 text-left shadow-lg">
-                              <Link
-                                href={`/cos?projectId=${item.id}`}
-                                className="block px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                              >
-                                Buka COS
-                              </Link>
-                              <Link
-                                href={`/ccpc?projectId=${item.id}`}
-                                className="block px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                              >
-                                Buka CCPC
-                              </Link>
-                              <Link
-                                href={`/ccp?projectId=${item.id}`}
-                                className="block px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                              >
-                                Buka CCP
-                              </Link>
-                            </div>
-                          ) : null}
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setOpenMenuId((current) =>
+                              current === item.id ? null : item.id
+                            )
+                          }
+                          className="rounded-lg border border-slate-200 p-2 hover:bg-slate-100"
+                          title="Lagi tindakan"
+                        >
+                          <MoreVertical size={16} />
+                        </button>
                       </div>
                     </td>
                   </tr>
+
+                    {openMenuId === item.id ? (
+                      <tr className="border-b border-slate-100 bg-blue-50">
+                        <td colSpan={10} className="px-4 py-3">
+                          <div className="flex flex-wrap items-center justify-end gap-2">
+                            <span className="mr-auto text-xs font-semibold text-blue-700">
+                              Shortcut modul untuk {item.kodProjek}
+                            </span>
+                            <Link
+                              href={`/cos?projectId=${item.id}`}
+                              className="rounded-lg border border-blue-200 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50"
+                            >
+                              Buka COS
+                            </Link>
+                            <Link
+                              href={`/ccpc?projectId=${item.id}`}
+                              className="rounded-lg border border-blue-200 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50"
+                            >
+                              Buka CCPC
+                            </Link>
+                            <Link
+                              href={`/ccp?projectId=${item.id}`}
+                              className="rounded-lg border border-blue-200 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50"
+                            >
+                              Buka CCP
+                            </Link>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : null}
+                  </Fragment>
                 );
               })
             )}
