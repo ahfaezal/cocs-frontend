@@ -1,11 +1,36 @@
 const cspSections = [
-  { no: 1, title: "Front Page & Maklumat Dokumen", active: true },
-  { no: 2, title: "Construction Occupational Structure (COS)" },
-  { no: 3, title: "Definition of Competency Levels" },
-  { no: 4, title: "Occupational Competencies" },
-  { no: 5, title: "Organisation Reference" },
-  { no: 6, title: "Technical Evaluation Committee" },
-  { no: 7, title: "Standard Development Committee" },
+  {
+    no: "1",
+    title: "Introduction",
+    active: true,
+    children: [
+      { no: "1.1", title: "Industry Overview" },
+      { no: "1.2", title: "Occupational Definition" },
+      { no: "1.3", title: "Occupational Scope" },
+      { no: "1.4", title: "Working Condition" },
+      { no: "1.5", title: "Employment Prospects" },
+      { no: "1.6", title: "Up Skilling Opportunities" },
+    ],
+  },
+  {
+    no: "2",
+    title: "COCS Development Scope",
+    children: [
+      { no: "2.1", title: "Rationale of COCS Development" },
+      { no: "2.2", title: "Construction Occupational Structure (COS)" },
+      { no: "2.3", title: "Rationale of Construction Occupational Structure" },
+      {
+        no: "2.4",
+        title: "Regulatory/Statutory Body Requirements",
+      },
+      { no: "2.5", title: "Occupational Prerequisite" },
+    ],
+  },
+  { no: "3", title: "Definition of Competency Levels" },
+  { no: "4", title: "Occupational Competencies" },
+  { no: "5", title: "Organisation Reference" },
+  { no: "6", title: "Standard Technical Evaluation Committee" },
+  { no: "7", title: "Standard Development Committee" },
 ];
 
 export function CSPStructureSidebar() {
@@ -17,25 +42,45 @@ export function CSPStructureSidebar() {
 
       <div className="space-y-2 px-4 py-4">
         {cspSections.map((section) => (
-          <button
+          <div
             key={section.no}
-            className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left transition ${
-              section.active
-                ? "bg-blue-50 text-blue-700"
-                : "text-slate-700 hover:bg-slate-50"
+            className={`rounded-xl ${
+              section.active ? "bg-blue-50" : "hover:bg-slate-50"
             }`}
           >
-            <div
-              className={`flex h-7 w-7 items-center justify-center rounded-full text-sm font-bold ${
-                section.active
-                  ? "bg-blue-600 text-white"
-                  : "bg-slate-100 text-slate-600"
+            <button
+              type="button"
+              className={`flex w-full items-center gap-3 px-4 py-3 text-left transition ${
+                section.active ? "text-blue-700" : "text-slate-700"
               }`}
             >
-              {section.no}
-            </div>
-            <span className="text-sm font-medium">{section.title}</span>
-          </button>
+              <div
+                className={`flex h-7 w-7 items-center justify-center rounded-full text-sm font-bold ${
+                  section.active
+                    ? "bg-blue-600 text-white"
+                    : "bg-slate-100 text-slate-600"
+                }`}
+              >
+                {section.no}
+              </div>
+              <span className="text-sm font-medium">{section.title}</span>
+            </button>
+
+            {section.children ? (
+              <div className="space-y-1 pb-3 pl-14 pr-3">
+                {section.children.map((child) => (
+                  <button
+                    key={child.no}
+                    type="button"
+                    className="block w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-600 transition hover:bg-white hover:text-blue-700"
+                  >
+                    <span className="mr-2 font-bold">{child.no}</span>
+                    {child.title}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
         ))}
       </div>
     </div>
