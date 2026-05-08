@@ -60,6 +60,28 @@ type CompetencySummary = {
   }[];
 };
 
+type ProjectAssignment = {
+  id: number;
+  project_id: number;
+  user_id: number;
+  assignment_role: string;
+  status?: string;
+};
+
+type UserSummary = {
+  id: number;
+  name: string;
+  role?: string;
+  organization?: string;
+  status?: string;
+};
+
+type CommitteeMember = {
+  name: string;
+  organization: string;
+  role: string;
+};
+
 const LEVELS = [6, 5, 4, 3, 2, 1];
 const ORGANISATION_REFERENCES = [
   {
@@ -125,6 +147,17 @@ function pad(value: number) {
 
 function alphabetMarker(index: number) {
   return `${String.fromCharCode(97 + index)})`;
+}
+
+function formatCommitteeRole(role: string) {
+  const labels: Record<string, string> = {
+    PROJECT_MANAGER: "Project Manager",
+    FACILITATOR: "Facilitator",
+    ASSESSOR: "Assessor",
+    SUPER_ADMIN: "Super Admin",
+  };
+
+  return labels[role] || role.replace(/_/g, " ");
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -197,6 +230,7 @@ function CSPDocumentMode({
   careerPath,
   matrix,
   competencies,
+  committeeMembers,
 }: {
   projectInfo: ProjectInfo;
   standardTitle: string;
@@ -204,6 +238,7 @@ function CSPDocumentMode({
   careerPath: string;
   matrix: COSMatrix | null;
   competencies: CompetencySummary[];
+  committeeMembers: CommitteeMember[];
 }) {
   return (
     <div className="space-y-6 rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
@@ -435,6 +470,74 @@ function CSPDocumentMode({
           ))}
         </div>
       </section>
+
+      <section className="border border-slate-300 p-6">
+        <h2 className="text-lg font-bold text-slate-900">
+          6. Standard Technical Evaluation Committee
+        </h2>
+
+        <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700">
+          Maklumat jawatankuasa teknikal akan dikemaskini selepas proses
+          penilaian teknikal standard disahkan.
+        </div>
+      </section>
+
+      <section className="border border-slate-300 p-6">
+        <h2 className="text-lg font-bold text-slate-900">
+          7. Standard Development Committee
+        </h2>
+
+        <div className="mt-4 text-center text-sm font-bold uppercase text-slate-900">
+          {standardTitle}
+        </div>
+        <div className="mt-1 text-center text-sm font-bold uppercase text-slate-900">
+          {formatLevel(standardLevel)}
+        </div>
+
+        {committeeMembers.length > 0 ? (
+          <table className="mt-4 w-full border border-black text-sm text-black">
+            <thead>
+              <tr className="bg-slate-200">
+                <th className="w-16 border border-black px-3 py-2 text-center">
+                  No.
+                </th>
+                <th className="border border-black px-3 py-2 text-left">
+                  Name
+                </th>
+                <th className="border border-black px-3 py-2 text-left">
+                  Organisation
+                </th>
+                <th className="w-40 border border-black px-3 py-2 text-left">
+                  Role
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {committeeMembers.map((member, memberIndex) => (
+                <tr key={`csp-committee-${member.name}-${memberIndex}`}>
+                  <td className="border border-black px-3 py-2 text-center">
+                    {memberIndex + 1}
+                  </td>
+                  <td className="border border-black px-3 py-2">
+                    {member.name}
+                  </td>
+                  <td className="border border-black px-3 py-2">
+                    {member.organization}
+                  </td>
+                  <td className="border border-black px-3 py-2">
+                    {member.role}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
+            Senarai ahli panel belum tersedia. Tetapkan pengguna kepada projek
+            ini melalui modul Pengguna.
+          </div>
+        )}
+      </section>
     </div>
   );
 }
@@ -447,6 +550,9 @@ function CSPPageContent() {
   const [targetInfo, setTargetInfo] = useState<COSTargetInfo | null>(null);
   const [matrix, setMatrix] = useState<COSMatrix | null>(null);
   const [clusters, setClusters] = useState<StoredCluster[]>([]);
+  const [committeeMembers, setCommitteeMembers] = useState<CommitteeMember[]>(
+    []
+  );
   const [projectInfo, setProjectInfo] = useState<ProjectInfo>({
     id: "",
     code: "-",
@@ -566,6 +672,65 @@ function CSPPageContent() {
     loadCCPCClusters();
   }, [sessionName]);
 
+  useEffect(() => {
+    if (!projectId) {
+      queueMicrotask(() => setCommitteeMembers([]));
+      return;
+    }
+
+    async function loadCommitteeMembers() {
+      const token = getAuthToken();
+      const headers = {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
+
+      try {
+        const [assignmentsRes, usersRes] = await Promise.all([
+          fetch(`${API_URL}/project-assignments/project/${projectId}`, {
+            cache: "no-store",
+            headers,
+          }),
+          fetch(`${API_URL}/users/`, {
+            cache: "no-store",
+            headers,
+          }),
+        ]);
+
+        if (!assignmentsRes.ok || !usersRes.ok) {
+          setCommitteeMembers([]);
+          return;
+        }
+
+        const assignments = (await assignmentsRes.json()) as ProjectAssignment[];
+        const users = (await usersRes.json()) as UserSummary[];
+
+        const activeAssignments = assignments.filter(
+          (assignment) => assignment.status !== "INACTIVE"
+        );
+
+        setCommitteeMembers(
+          activeAssignments
+            .map((assignment) => {
+              const user = users.find((item) => item.id === assignment.user_id);
+              if (!user || user.status === "INACTIVE") return null;
+
+              return {
+                name: user.name,
+                organization: user.organization || "-",
+                role: formatCommitteeRole(assignment.assignment_role),
+              };
+            })
+            .filter((member): member is CommitteeMember => Boolean(member))
+        );
+      } catch (error) {
+        console.error("Gagal load ahli panel CSP:", error);
+        setCommitteeMembers([]);
+      }
+    }
+
+    loadCommitteeMembers();
+  }, [projectId]);
+
   return (
     <div className="space-y-6">
       <div className="rounded-2xl border border-slate-200 bg-white px-6 py-4 shadow-sm">
@@ -675,6 +840,7 @@ function CSPPageContent() {
           careerPath={careerPath}
           matrix={matrix}
           competencies={competencies}
+          committeeMembers={committeeMembers}
         />
       ) : (
         <>
