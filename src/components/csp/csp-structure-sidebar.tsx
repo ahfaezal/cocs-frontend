@@ -1,5 +1,30 @@
 const cspSections = [
   {
+    no: "prakata",
+    label: "P",
+    title: "Prakata",
+  },
+  {
+    no: "abbreviation",
+    label: "AB",
+    title: "Abbreviation",
+  },
+  {
+    no: "glossary",
+    label: "G",
+    title: "Glossary",
+  },
+  {
+    no: "figures",
+    label: "F",
+    title: "List of Figure",
+  },
+  {
+    no: "acknowledgement",
+    label: "A",
+    title: "Acknowledgement",
+  },
+  {
     no: "1",
     title: "Introduction",
     active: true,
@@ -75,7 +100,7 @@ export function CSPStructureSidebar({
                       : "bg-slate-100 text-slate-600"
                   }`}
                 >
-                  {section.no}
+                  {section.label || section.no}
                 </div>
                 <span className="text-sm font-medium">{section.title}</span>
               </button>

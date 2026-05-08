@@ -138,6 +138,34 @@ const ORGANISATION_REFERENCES = [
   },
 ];
 const CSP_BUILDER_SECTION_DETAILS: Record<string, CSPBuilderSectionDetail> = {
+  prakata: {
+    title: "Prakata",
+    description: "Bahagian ini menggunakan teks tetap daripada format CSP.",
+    kind: "fixed",
+  },
+  abbreviation: {
+    title: "Abbreviation",
+    description:
+      "Senarai abbreviation boleh dijana automatik daripada kandungan dokumen.",
+    kind: "auto",
+  },
+  glossary: {
+    title: "Glossary",
+    description:
+      "Senarai glossary boleh dijana automatik daripada istilah penting dalam dokumen.",
+    kind: "auto",
+  },
+  figures: {
+    title: "List of Figure",
+    description:
+      "Senarai rajah boleh dijana automatik daripada rajah yang wujud dalam dokumen.",
+    kind: "auto",
+  },
+  acknowledgement: {
+    title: "Acknowledgement",
+    description: "Bahagian ini menggunakan teks tetap daripada format CSP.",
+    kind: "fixed",
+  },
   "1": {
     title: "1. Introduction",
     description: "Lengkapkan seksyen pengenalan bagi dokumen CSP.",
