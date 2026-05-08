@@ -41,10 +41,103 @@ type COSMatrix = {
   levels: Record<number, string[]>;
 };
 
+type StoredCluster = {
+  id?: string | number;
+  clusterName?: string;
+  suggestedName?: string;
+  name?: string;
+  items?: unknown[];
+  cards?: unknown[];
+  finalised?: boolean;
+};
+
+type CompetencySummary = {
+  code: string;
+  title: string;
+  units: {
+    code: string;
+    title: string;
+  }[];
+};
+
 const LEVELS = [6, 5, 4, 3, 2, 1];
 
 function formatLevel(level: string) {
   return level && level !== "-" ? `Tahap ${level}` : "-";
+}
+
+function slugify(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+function pad(value: number) {
+  return String(value).padStart(2, "0");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function cleanText(value: unknown) {
+  return String(value ?? "").trim();
+}
+
+function extractClusterItems(cluster: StoredCluster) {
+  const rawItems = cluster.items ?? cluster.cards ?? [];
+
+  return rawItems
+    .map((item) => {
+      if (typeof item === "string") return item;
+
+      if (isRecord(item)) {
+        return item.text ?? item.cardText ?? item.title ?? "";
+      }
+
+      return "";
+    })
+    .map(cleanText)
+    .filter(Boolean);
+}
+
+function extractStoredClusters(payload: unknown) {
+  if (!payload) return [];
+  if (Array.isArray(payload)) return payload as StoredCluster[];
+
+  if (isRecord(payload) && Array.isArray(payload.clusters)) {
+    return payload.clusters as StoredCluster[];
+  }
+
+  return [];
+}
+
+function getUsableClusters(clusters: StoredCluster[]) {
+  const finalisedClusters = clusters.filter((cluster) => cluster.finalised);
+  return finalisedClusters.length > 0 ? finalisedClusters : clusters;
+}
+
+function buildCompetencySummaries(
+  clusters: StoredCluster[]
+): CompetencySummary[] {
+  return clusters.map((cluster, clusterIndex) => {
+    const code = `CC${pad(clusterIndex + 1)}`;
+    const title =
+      cleanText(cluster.clusterName) ||
+      cleanText(cluster.suggestedName) ||
+      cleanText(cluster.name) ||
+      `Core Competency ${clusterIndex + 1}`;
+
+    return {
+      code,
+      title,
+      units: extractClusterItems(cluster).map((item, itemIndex) => ({
+        code: `${code}-WA${pad(itemIndex + 1)}`,
+        title: item,
+      })),
+    };
+  });
 }
 
 function CSPDocumentMode({
@@ -53,12 +146,14 @@ function CSPDocumentMode({
   standardLevel,
   careerPath,
   matrix,
+  competencies,
 }: {
   projectInfo: ProjectInfo;
   standardTitle: string;
   standardLevel: string;
   careerPath: string;
   matrix: COSMatrix | null;
+  competencies: CompetencySummary[];
 }) {
   return (
     <div className="space-y-6 rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
@@ -219,6 +314,76 @@ function CSPDocumentMode({
           </div>
         )}
       </section>
+
+      <section className="border border-slate-300 p-6">
+        <h2 className="text-lg font-bold text-slate-900">
+          4. Occupational Competencies
+        </h2>
+
+        <p className="mt-3 text-sm leading-6 text-slate-700">
+          The {standardTitle} {formatLevel(standardLevel)} personnel is
+          competent in performing the following core competencies:
+        </p>
+
+        {competencies.length > 0 ? (
+          <div className="mt-4 space-y-4">
+            <ol className="list-[lower-alpha] space-y-1 pl-6 text-sm font-semibold text-slate-900">
+              {competencies.map((competency) => (
+                <li key={`csp-competency-list-${competency.code}`}>
+                  {competency.title}
+                </li>
+              ))}
+            </ol>
+
+            <table className="w-full border border-black text-sm text-black">
+              <thead>
+                <tr className="bg-slate-200">
+                  <th className="w-40 border border-black px-3 py-2 text-left">
+                    Core Competency
+                  </th>
+                  <th className="border border-black px-3 py-2 text-left">
+                    Competency Unit
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {competencies.map((competency) => (
+                  <tr key={`csp-competency-table-${competency.code}`}>
+                    <td className="border border-black px-3 py-2 align-top">
+                      <div className="font-bold">{competency.title}</div>
+                      <div className="mt-1 text-xs">{competency.code}</div>
+                    </td>
+                    <td className="border border-black px-3 py-2">
+                      {competency.units.length > 0 ? (
+                        <div className="grid gap-2">
+                          {competency.units.map((unit) => (
+                            <div
+                              key={`csp-competency-unit-${unit.code}`}
+                              className="flex gap-3"
+                            >
+                              <span className="w-24 shrink-0 font-semibold">
+                                {unit.code}
+                              </span>
+                              <span>{unit.title}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        "-"
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
+            Competency belum tersedia. Lengkapkan CCPC dan finalise cluster
+            sebelum menjana seksyen ini.
+          </div>
+        )}
+      </section>
     </div>
   );
 }
@@ -230,6 +395,7 @@ function CSPPageContent() {
   const [viewMode, setViewMode] = useState<"builder" | "document">("builder");
   const [targetInfo, setTargetInfo] = useState<COSTargetInfo | null>(null);
   const [matrix, setMatrix] = useState<COSMatrix | null>(null);
+  const [clusters, setClusters] = useState<StoredCluster[]>([]);
   const [projectInfo, setProjectInfo] = useState<ProjectInfo>({
     id: "",
     code: "-",
@@ -293,6 +459,17 @@ function CSPPageContent() {
 
   const standardTitle = targetInfo?.occupationTitle || projectInfo.title;
   const standardLevel = String(targetInfo?.level || projectInfo.level || "-");
+  const sessionName = useMemo(() => {
+    if (!projectId || standardTitle === "-") return "";
+
+    return `project-${projectId}-${slugify(
+      standardTitle || projectInfo.title || "dacum-session"
+    )}`;
+  }, [projectId, projectInfo.title, standardTitle]);
+  const competencies = useMemo(
+    () => buildCompetencySummaries(clusters),
+    [clusters]
+  );
   const careerPath = useMemo(
     () =>
       targetInfo?.subarea ||
@@ -304,6 +481,39 @@ function CSPPageContent() {
   );
   const ccpHref = projectId ? `/ccp?projectId=${projectId}` : "/ccp";
   const cccHref = projectId ? `/ccc?projectId=${projectId}` : "/ccc";
+
+  useEffect(() => {
+    if (!sessionName) {
+      queueMicrotask(() => setClusters([]));
+      return;
+    }
+
+    async function loadCCPCClusters() {
+      try {
+        const token = getAuthToken();
+
+        const res = await fetch(`${API_URL}/ccpc/clusters/${sessionName}`, {
+          cache: "no-store",
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        });
+
+        if (!res.ok) {
+          setClusters([]);
+          return;
+        }
+
+        const payload = await res.json();
+        setClusters(getUsableClusters(extractStoredClusters(payload)));
+      } catch (error) {
+        console.error("Gagal load CCPC clusters untuk CSP:", error);
+        setClusters([]);
+      }
+    }
+
+    loadCCPCClusters();
+  }, [sessionName]);
 
   return (
     <div className="space-y-6">
@@ -413,6 +623,7 @@ function CSPPageContent() {
           standardLevel={standardLevel}
           careerPath={careerPath}
           matrix={matrix}
+          competencies={competencies}
         />
       ) : (
         <>
