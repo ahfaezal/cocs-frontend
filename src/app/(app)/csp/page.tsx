@@ -82,6 +82,14 @@ type CommitteeMember = {
   role: string;
 };
 
+type CSPBuilderSectionKind = "manual" | "auto" | "fixed";
+
+type CSPBuilderSectionDetail = {
+  title: string;
+  description: string;
+  kind: CSPBuilderSectionKind;
+};
+
 const LEVELS = [6, 5, 4, 3, 2, 1];
 const ORGANISATION_REFERENCES = [
   {
@@ -129,6 +137,98 @@ const ORGANISATION_REFERENCES = [
     ],
   },
 ];
+const CSP_BUILDER_SECTION_DETAILS: Record<string, CSPBuilderSectionDetail> = {
+  "1": {
+    title: "1. Introduction",
+    description: "Lengkapkan seksyen pengenalan bagi dokumen CSP.",
+    kind: "manual",
+  },
+  "1.1": {
+    title: "1.1 Industry Overview",
+    description: "Huraikan gambaran industri berkaitan pekerjaan sasaran.",
+    kind: "manual",
+  },
+  "1.2": {
+    title: "1.2 Occupational Definition",
+    description: "Takrifkan pekerjaan sasaran mengikut skop kerja dan tahap.",
+    kind: "manual",
+  },
+  "1.3": {
+    title: "1.3 Occupational Scope",
+    description: "Nyatakan skop kerja utama bagi pekerjaan sasaran.",
+    kind: "manual",
+  },
+  "1.4": {
+    title: "1.4 Working Condition",
+    description: "Terangkan keadaan kerja, persekitaran dan keperluan kerja.",
+    kind: "manual",
+  },
+  "1.5": {
+    title: "1.5 Employment Prospects",
+    description: "Huraikan prospek pekerjaan dan permintaan industri.",
+    kind: "manual",
+  },
+  "1.6": {
+    title: "1.6 Up Skilling Opportunities",
+    description: "Huraikan peluang peningkatan kemahiran dan laluan kerjaya.",
+    kind: "manual",
+  },
+  "2": {
+    title: "2. COCS Development Scope",
+    description: "Lengkapkan skop pembangunan COCS.",
+    kind: "manual",
+  },
+  "2.1": {
+    title: "2.1 Rationale of COCS Development",
+    description: "Jelaskan rasional pembangunan standard COCS ini.",
+    kind: "manual",
+  },
+  "2.2": {
+    title: "2.2 Construction Occupational Structure (COS)",
+    description: "Bahagian ini diambil automatik daripada modul COS.",
+    kind: "auto",
+  },
+  "2.3": {
+    title: "2.3 Rationale of Construction Occupational Structure",
+    description: "Jelaskan rasional struktur pekerjaan yang dibangunkan.",
+    kind: "manual",
+  },
+  "2.4": {
+    title: "2.4 Regulatory/Statutory Body Requirements Related to Occupation",
+    description: "Senaraikan keperluan badan kawalselia atau statutori.",
+    kind: "manual",
+  },
+  "2.5": {
+    title: "2.5 Occupational Prerequisite",
+    description: "Nyatakan prasyarat pekerjaan, kelayakan atau pengalaman asas.",
+    kind: "manual",
+  },
+  "3": {
+    title: "3. Definition of Competency Levels",
+    description: "Bahagian ini menggunakan teks tetap daripada format CSP.",
+    kind: "fixed",
+  },
+  "4": {
+    title: "4. Occupational Competencies",
+    description: "Bahagian ini diambil automatik daripada hasil CCPC.",
+    kind: "auto",
+  },
+  "5": {
+    title: "5. Organisation Reference for Sources of Additional Information",
+    description: "Lengkapkan organisasi rujukan tambahan untuk dokumen CSP.",
+    kind: "manual",
+  },
+  "6": {
+    title: "6. Standard Technical Evaluation Committee",
+    description: "Lengkapkan maklumat jawatankuasa penilaian teknikal.",
+    kind: "manual",
+  },
+  "7": {
+    title: "7. Standard Development Committee",
+    description: "Bahagian ini boleh diambil daripada tugasan pengguna projek.",
+    kind: "auto",
+  },
+};
 
 function formatLevel(level: string) {
   return level && level !== "-" ? `Tahap ${level}` : "-";
@@ -542,11 +642,88 @@ function CSPDocumentMode({
   );
 }
 
+function CSPBuilderSectionPanel({
+  section,
+  standardTitle,
+  standardLevel,
+  careerPath,
+}: {
+  section: CSPBuilderSectionDetail;
+  standardTitle: string;
+  standardLevel: string;
+  careerPath: string;
+}) {
+  const defaultDraft =
+    section.kind === "manual"
+      ? `${section.title} bagi ${standardTitle} ${formatLevel(
+          standardLevel
+        )} dalam ${careerPath}.`
+      : "";
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="border-b border-slate-200 px-6 py-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-bold text-blue-700">
+              {section.title}
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              {section.description}
+            </p>
+          </div>
+
+          <span
+            className={`rounded-full px-3 py-1 text-sm font-semibold ${
+              section.kind === "manual"
+                ? "bg-emerald-100 text-emerald-700"
+                : section.kind === "fixed"
+                  ? "bg-slate-100 text-slate-600"
+                  : "bg-blue-100 text-blue-700"
+            }`}
+          >
+            {section.kind === "manual"
+              ? "Draf CSP"
+              : section.kind === "fixed"
+                ? "Teks Tetap"
+                : "Auto"}
+          </span>
+        </div>
+      </div>
+
+      <div className="space-y-4 px-6 py-6">
+        {section.kind === "manual" ? (
+          <>
+            <textarea
+              className="min-h-[220px] w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              defaultValue={defaultDraft}
+            />
+
+            <div className="flex justify-end">
+              <button
+                type="button"
+                className="rounded-xl border border-blue-200 px-4 py-2.5 text-sm font-semibold text-blue-700 transition hover:bg-blue-50"
+              >
+                Jana AI
+              </button>
+            </div>
+          </>
+        ) : (
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700">
+            {section.description}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function CSPPageContent() {
   const searchParams = useSearchParams();
   const projectId = searchParams.get("projectId") || "";
 
   const [viewMode, setViewMode] = useState<"builder" | "document">("builder");
+  const [activeBuilderSection, setActiveBuilderSection] = useState("1");
   const [targetInfo, setTargetInfo] = useState<COSTargetInfo | null>(null);
   const [matrix, setMatrix] = useState<COSMatrix | null>(null);
   const [clusters, setClusters] = useState<StoredCluster[]>([]);
@@ -627,6 +804,9 @@ function CSPPageContent() {
     () => buildCompetencySummaries(clusters),
     [clusters]
   );
+  const activeBuilderDetail =
+    CSP_BUILDER_SECTION_DETAILS[activeBuilderSection] ??
+    CSP_BUILDER_SECTION_DETAILS["1"];
   const careerPath = useMemo(
     () =>
       targetInfo?.subarea ||
@@ -845,59 +1025,71 @@ function CSPPageContent() {
       ) : (
         <>
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
-            <CSPStructureSidebar />
+            <CSPStructureSidebar
+              activeSection={activeBuilderSection}
+              onSelectSection={setActiveBuilderSection}
+            />
 
             <div className="space-y-6">
-              <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <div className="border-b border-slate-200 px-6 py-5">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
+              {activeBuilderSection === "1" ? (
+                <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                  <div className="border-b border-slate-200 px-6 py-5">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <h2 className="text-xl font-bold text-blue-700">
+                          1. Introduction
+                        </h2>
+                        <p className="mt-1 text-sm text-slate-500">
+                          Lengkapkan seksyen pengenalan bagi dokumen CSP.
+                        </p>
+                      </div>
+
+                      <span className="rounded-full bg-emerald-100 px-3 py-1 text-sm font-semibold text-emerald-700">
+                        Draf CSP
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-6 px-6 py-6">
                     <div>
-                      <h2 className="text-xl font-bold text-blue-700">
-                        1. Pengenalan
-                      </h2>
-                      <p className="mt-1 text-sm text-slate-500">
-                        Lengkapkan seksyen pengenalan bagi dokumen CSP.
-                      </p>
+                      <label className="mb-2 block text-sm font-semibold text-slate-700">
+                        Latar Belakang
+                      </label>
+                      <textarea
+                        className="min-h-[160px] w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                        defaultValue={`Industri pembinaan di Malaysia memainkan peranan penting dalam pembangunan infrastruktur dan kemudahan awam serta swasta. ${standardTitle} merupakan pekerjaan dalam ${projectInfo.subsector} yang memerlukan kompetensi selaras dengan struktur pekerjaan, tahap kemahiran dan keperluan industri.`}
+                      />
                     </div>
 
-                    <span className="rounded-full bg-emerald-100 px-3 py-1 text-sm font-semibold text-emerald-700">
-                      Draf CSP
-                    </span>
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold text-slate-700">
+                        Industry Overview
+                      </label>
+                      <textarea
+                        className="min-h-[140px] w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                        defaultValue={`Sektor ${projectInfo.sector} merangkumi bidang ${projectInfo.subsector}. Pembangunan standard bagi ${standardTitle} membantu memastikan tenaga kerja mempunyai pengetahuan, kemahiran dan amalan kerja yang konsisten dengan keperluan semasa industri pembinaan.`}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold text-slate-700">
+                        Occupational Definition
+                      </label>
+                      <textarea
+                        className="min-h-[140px] w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                        defaultValue={`${standardTitle} ${formatLevel(standardLevel)} ialah personel yang melaksanakan aktiviti kerja dalam ${careerPath} mengikut prosedur, spesifikasi, keperluan keselamatan dan standard kualiti yang ditetapkan.`}
+                      />
+                    </div>
                   </div>
                 </div>
-
-                <div className="space-y-6 px-6 py-6">
-                  <div>
-                    <label className="mb-2 block text-sm font-semibold text-slate-700">
-                      Latar Belakang
-                    </label>
-                    <textarea
-                      className="min-h-[160px] w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                      defaultValue={`Industri pembinaan di Malaysia memainkan peranan penting dalam pembangunan infrastruktur dan kemudahan awam serta swasta. ${standardTitle} merupakan pekerjaan dalam ${projectInfo.subsector} yang memerlukan kompetensi selaras dengan struktur pekerjaan, tahap kemahiran dan keperluan industri.`}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="mb-2 block text-sm font-semibold text-slate-700">
-                      Industry Overview
-                    </label>
-                    <textarea
-                      className="min-h-[140px] w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                      defaultValue={`Sektor ${projectInfo.sector} merangkumi bidang ${projectInfo.subsector}. Pembangunan standard bagi ${standardTitle} membantu memastikan tenaga kerja mempunyai pengetahuan, kemahiran dan amalan kerja yang konsisten dengan keperluan semasa industri pembinaan.`}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="mb-2 block text-sm font-semibold text-slate-700">
-                      Occupational Definition
-                    </label>
-                    <textarea
-                      className="min-h-[140px] w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                      defaultValue={`${standardTitle} ${formatLevel(standardLevel)} ialah personel yang melaksanakan aktiviti kerja dalam ${careerPath} mengikut prosedur, spesifikasi, keperluan keselamatan dan standard kualiti yang ditetapkan.`}
-                    />
-                  </div>
-                </div>
-              </div>
+              ) : (
+                <CSPBuilderSectionPanel
+                  section={activeBuilderDetail}
+                  standardTitle={standardTitle}
+                  standardLevel={standardLevel}
+                  careerPath={careerPath}
+                />
+              )}
 
               <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <div className="border-b border-slate-200 px-6 py-5">

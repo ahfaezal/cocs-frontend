@@ -33,7 +33,15 @@ const cspSections = [
   { no: "7", title: "Standard Development Committee" },
 ];
 
-export function CSPStructureSidebar() {
+type CSPStructureSidebarProps = {
+  activeSection: string;
+  onSelectSection: (sectionNo: string) => void;
+};
+
+export function CSPStructureSidebar({
+  activeSection,
+  onSelectSection,
+}: CSPStructureSidebarProps) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="border-b border-slate-200 px-5 py-4">
@@ -41,47 +49,63 @@ export function CSPStructureSidebar() {
       </div>
 
       <div className="space-y-2 px-4 py-4">
-        {cspSections.map((section) => (
-          <div
-            key={section.no}
-            className={`rounded-xl ${
-              section.active ? "bg-blue-50" : "hover:bg-slate-50"
-            }`}
-          >
-            <button
-              type="button"
-              className={`flex w-full items-center gap-3 px-4 py-3 text-left transition ${
-                section.active ? "text-blue-700" : "text-slate-700"
+        {cspSections.map((section) => {
+          const isActive =
+            activeSection === section.no ||
+            section.children?.some((child) => child.no === activeSection);
+
+          return (
+            <div
+              key={section.no}
+              className={`rounded-xl ${
+                isActive ? "bg-blue-50" : "hover:bg-slate-50"
               }`}
             >
-              <div
-                className={`flex h-7 w-7 items-center justify-center rounded-full text-sm font-bold ${
-                  section.active
-                    ? "bg-blue-600 text-white"
-                    : "bg-slate-100 text-slate-600"
+              <button
+                type="button"
+                onClick={() => onSelectSection(section.no)}
+                className={`flex w-full items-center gap-3 px-4 py-3 text-left transition ${
+                  isActive ? "text-blue-700" : "text-slate-700"
                 }`}
               >
-                {section.no}
-              </div>
-              <span className="text-sm font-medium">{section.title}</span>
-            </button>
+                <div
+                  className={`flex h-7 w-7 items-center justify-center rounded-full text-sm font-bold ${
+                    isActive
+                      ? "bg-blue-600 text-white"
+                      : "bg-slate-100 text-slate-600"
+                  }`}
+                >
+                  {section.no}
+                </div>
+                <span className="text-sm font-medium">{section.title}</span>
+              </button>
 
-            {section.children ? (
-              <div className="space-y-1 pb-3 pl-14 pr-3">
-                {section.children.map((child) => (
-                  <button
-                    key={child.no}
-                    type="button"
-                    className="block w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-600 transition hover:bg-white hover:text-blue-700"
-                  >
-                    <span className="mr-2 font-bold">{child.no}</span>
-                    {child.title}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
-        ))}
+              {section.children ? (
+                <div className="space-y-1 pb-3 pl-14 pr-3">
+                  {section.children.map((child) => {
+                    const isChildActive = activeSection === child.no;
+
+                    return (
+                      <button
+                        key={child.no}
+                        type="button"
+                        onClick={() => onSelectSection(child.no)}
+                        className={`block w-full rounded-lg px-3 py-2 text-left text-xs font-medium transition ${
+                          isChildActive
+                            ? "bg-white text-blue-700"
+                            : "text-slate-600 hover:bg-white hover:text-blue-700"
+                        }`}
+                      >
+                        <span className="mr-2 font-bold">{child.no}</span>
+                        {child.title}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
