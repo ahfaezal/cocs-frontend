@@ -677,6 +677,8 @@ function CSPBuilderSectionPanel({
   careerPath,
   sector,
   subsector,
+  sectionContent,
+  onContentChange,
 }: {
   section: CSPBuilderSectionDetail;
   standardTitle: string;
@@ -684,6 +686,8 @@ function CSPBuilderSectionPanel({
   careerPath: string;
   sector: string;
   subsector: string;
+  sectionContent?: string;
+  onContentChange: (content: string) => void;
 }) {
   const defaultDraft =
     section.kind === "manual"
@@ -691,7 +695,7 @@ function CSPBuilderSectionPanel({
           standardLevel
         )} dalam ${careerPath}.`
       : "";
-  const [content, setContent] = useState(defaultDraft);
+  const content = sectionContent ?? defaultDraft;
   const [isGenerating, setIsGenerating] = useState(false);
 
   async function handleGenerateAI() {
@@ -721,7 +725,7 @@ function CSPBuilderSectionPanel({
       const data = (await res.json()) as { content?: string };
 
       if (data.content) {
-        setContent(data.content);
+        onContentChange(data.content);
       }
     } catch (error) {
       console.error("Gagal jana AI CSP:", error);
@@ -768,7 +772,7 @@ function CSPBuilderSectionPanel({
             <textarea
               className="min-h-[220px] w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               value={content}
-              onChange={(event) => setContent(event.target.value)}
+              onChange={(event) => onContentChange(event.target.value)}
             />
 
             <div className="flex justify-end">
@@ -801,6 +805,9 @@ function CSPPageContent() {
   const [targetInfo, setTargetInfo] = useState<COSTargetInfo | null>(null);
   const [matrix, setMatrix] = useState<COSMatrix | null>(null);
   const [clusters, setClusters] = useState<StoredCluster[]>([]);
+  const [cspSections, setCspSections] = useState<Record<string, string>>({});
+  const [isSavingCSP, setIsSavingCSP] = useState(false);
+  const [saveMessage, setSaveMessage] = useState("");
   const [committeeMembers, setCommitteeMembers] = useState<CommitteeMember[]>(
     []
   );
@@ -892,6 +899,71 @@ function CSPPageContent() {
   );
   const ccpHref = projectId ? `/ccp?projectId=${projectId}` : "/ccp";
   const cccHref = projectId ? `/ccc?projectId=${projectId}` : "/ccc";
+
+  useEffect(() => {
+    if (!projectId) return;
+
+    async function loadCSPContent() {
+      try {
+        const token = getAuthToken();
+
+        const res = await fetch(`${API_URL}/csp/content/${projectId}`, {
+          cache: "no-store",
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        });
+
+        if (!res.ok) return;
+
+        const data = (await res.json()) as {
+          sections?: Record<string, string>;
+        };
+
+        setCspSections(data.sections || {});
+      } catch (error) {
+        console.error("Gagal load kandungan CSP:", error);
+      }
+    }
+
+    loadCSPContent();
+  }, [projectId]);
+
+  async function handleSaveCSPContent() {
+    if (!projectId) {
+      alert("Project ID tidak ditemui.");
+      return;
+    }
+
+    try {
+      setIsSavingCSP(true);
+      setSaveMessage("");
+
+      const token = getAuthToken();
+
+      const res = await fetch(`${API_URL}/csp/content/${projectId}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          sections: cspSections,
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Gagal menyimpan kandungan CSP.");
+      }
+
+      setSaveMessage("Kandungan CSP telah disimpan.");
+    } catch (error) {
+      console.error("Gagal simpan kandungan CSP:", error);
+      alert("Gagal menyimpan kandungan CSP.");
+    } finally {
+      setIsSavingCSP(false);
+    }
+  }
 
   useEffect(() => {
     if (!sessionName) {
@@ -1070,13 +1142,24 @@ function CSPPageContent() {
               Pratonton
             </button>
 
-            <button className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white transition hover:bg-blue-700">
+            <button
+              type="button"
+              onClick={handleSaveCSPContent}
+              disabled={isSavingCSP}
+              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
               <Save size={16} />
-              Simpan
+              {isSavingCSP ? "Menyimpan..." : "Simpan"}
             </button>
           </div>
         </div>
       </div>
+
+      {saveMessage ? (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-semibold text-emerald-700">
+          {saveMessage}
+        </div>
+      ) : null}
 
       <CSPDocumentHeader
         bidangPekerjaan={standardTitle}
@@ -1113,6 +1196,13 @@ function CSPPageContent() {
                 careerPath={careerPath}
                 sector={projectInfo.sector}
                 subsector={projectInfo.subsector}
+                sectionContent={cspSections[activeBuilderSection]}
+                onContentChange={(content) =>
+                  setCspSections((prev) => ({
+                    ...prev,
+                    [activeBuilderSection]: content,
+                  }))
+                }
               />
 
               <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
