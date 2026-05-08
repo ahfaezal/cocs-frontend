@@ -326,56 +326,17 @@ function CSPDocumentMode({
         </p>
 
         {competencies.length > 0 ? (
-          <div className="mt-4 space-y-4">
-            <ol className="list-[lower-alpha] space-y-1 pl-6 text-sm font-semibold text-slate-900">
-              {competencies.map((competency) => (
+          <div className="mt-4">
+            <ol className="list-[lower-alpha] space-y-1 pl-6 text-sm font-semibold leading-6 text-slate-900">
+              {competencies.map((competency, competencyIndex) => (
                 <li key={`csp-competency-list-${competency.code}`}>
                   {competency.title}
+                  {competencyIndex === competencies.length - 2
+                    ? "; and"
+                    : ";"}
                 </li>
               ))}
             </ol>
-
-            <table className="w-full border border-black text-sm text-black">
-              <thead>
-                <tr className="bg-slate-200">
-                  <th className="w-40 border border-black px-3 py-2 text-left">
-                    Core Competency
-                  </th>
-                  <th className="border border-black px-3 py-2 text-left">
-                    Competency Unit
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {competencies.map((competency) => (
-                  <tr key={`csp-competency-table-${competency.code}`}>
-                    <td className="border border-black px-3 py-2 align-top">
-                      <div className="font-bold">{competency.title}</div>
-                      <div className="mt-1 text-xs">{competency.code}</div>
-                    </td>
-                    <td className="border border-black px-3 py-2">
-                      {competency.units.length > 0 ? (
-                        <div className="grid gap-2">
-                          {competency.units.map((unit) => (
-                            <div
-                              key={`csp-competency-unit-${unit.code}`}
-                              className="flex gap-3"
-                            >
-                              <span className="w-24 shrink-0 font-semibold">
-                                {unit.code}
-                              </span>
-                              <span>{unit.title}</span>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        "-"
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           </div>
         ) : (
           <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
