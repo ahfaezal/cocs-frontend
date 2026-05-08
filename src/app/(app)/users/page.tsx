@@ -35,6 +35,14 @@ type ProjectOption = {
   title?: string;
 };
 
+type ProjectAssignment = {
+  id: number;
+  project_id: number;
+  user_id: number;
+  assignment_role: UserRole;
+  status: UserStatus;
+};
+
 const roleOptions: UserRole[] = [
   "SUPER_ADMIN",
   "CIDB_ADMIN",
@@ -53,12 +61,23 @@ function needsProjectAssignment(role: UserRole) {
   return assignableRoles.includes(role);
 }
 
+function getAuthHeaders(includeJson = false) {
+  const token = getAuthToken();
+
+  return {
+    ...(includeJson ? { "Content-Type": "application/json" } : {}),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
 export default function UsersPage() {
   const currentUser = useCurrentUser();
   const canManageUsers = hasPermission(currentUser.role, "user:manage");
 
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
+  const [assignments, setAssignments] = useState<ProjectAssignment[]>([]);
+  const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
@@ -70,6 +89,8 @@ export default function UsersPage() {
     organization: "CIDB Malaysia",
     assignedProjectId: "",
   });
+
+  const isEditing = editingUserId !== null;
 
   const filteredUsers = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -89,14 +110,24 @@ export default function UsersPage() {
     });
   }, [search, users]);
 
-  async function loadProjects() {
-    const token = getAuthToken();
+  function formatProjectTitle(projectId: number) {
+    const project = projects.find((item) => item.id === projectId);
 
+    if (!project) return `Project ID ${projectId}`;
+
+    return `${project.project_code || `COCS-${project.id}`} - ${
+      project.title || "Untitled Project"
+    }`;
+  }
+
+  function getUserAssignments(userId: number) {
+    return assignments.filter((assignment) => assignment.user_id === userId);
+  }
+
+  async function loadProjects() {
     const res = await fetch(`${API_URL}/projects/`, {
       cache: "no-store",
-      headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
+      headers: getAuthHeaders(),
     });
 
     if (!res.ok) {
@@ -120,19 +151,14 @@ export default function UsersPage() {
       setLoadingUsers(true);
       setErrorMessage("");
 
-      const token = getAuthToken();
-      const authHeaders = {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      };
-
       const [usersRes, assignmentsRes] = await Promise.all([
         fetch(`${API_URL}/users/`, {
           cache: "no-store",
-          headers: authHeaders,
+          headers: getAuthHeaders(),
         }),
         fetch(`${API_URL}/project-assignments/`, {
           cache: "no-store",
-          headers: authHeaders,
+          headers: getAuthHeaders(),
         }),
       ]);
 
@@ -152,21 +178,13 @@ export default function UsersPage() {
         ? assignmentsData
         : [];
 
+      setAssignments(assignmentList);
+
       setUsers(
         userList.map((user) => {
           const assignedProjectTitles = assignmentList
             .filter((assignment) => assignment.user_id === user.id)
-            .map((assignment) => {
-              const project = projects.find(
-                (item) => item.id === assignment.project_id
-              );
-
-              if (!project) return `Project ID ${assignment.project_id}`;
-
-              return `${project.project_code || `COCS-${project.id}`} - ${
-                project.title || "Untitled Project"
-              }`;
-            });
+            .map((assignment) => formatProjectTitle(assignment.project_id));
 
           return {
             id: user.id,
@@ -229,15 +247,72 @@ export default function UsersPage() {
     });
   }
 
-  async function handleAddUser() {
+  function resetForm() {
+    setEditingUserId(null);
+    setForm({
+      name: "",
+      email: "",
+      password: "",
+      role: "FACILITATOR",
+      organization: "CIDB Malaysia",
+      assignedProjectId: "",
+    });
+  }
+
+  function startEditUser(user: ManagedUser) {
+    setEditingUserId(user.id);
+    setForm({
+      name: user.name,
+      email: user.email,
+      password: "",
+      role: user.role,
+      organization: user.organization,
+      assignedProjectId: "",
+    });
+  }
+
+  async function createAssignment(
+    userId: number,
+    projectId: string,
+    role: UserRole
+  ) {
+    const assignmentRes = await fetch(`${API_URL}/project-assignments/`, {
+      method: "POST",
+      headers: getAuthHeaders(true),
+      body: JSON.stringify({
+        project_id: Number(projectId),
+        user_id: userId,
+        assignment_role: role,
+        status: "ACTIVE",
+      }),
+    });
+
+    if (!assignmentRes.ok) {
+      const text = await assignmentRes.text();
+
+      try {
+        const errorData = JSON.parse(text);
+        throw new Error(errorData.detail || text);
+      } catch {
+        throw new Error(text || "Gagal tambah tugasan projek.");
+      }
+    }
+  }
+
+  async function handleSubmitUser() {
     const roleNeedsAssignment = needsProjectAssignment(form.role);
 
-    if (!form.name.trim() || !form.email.trim() || !form.password.trim()) {
-      alert("Sila masukkan nama, emel dan password pengguna.");
+    if (!form.name.trim() || !form.email.trim()) {
+      alert("Sila masukkan nama dan emel pengguna.");
       return;
     }
 
-    if (roleNeedsAssignment && !form.assignedProjectId) {
+    if (!isEditing && !form.password.trim()) {
+      alert("Sila masukkan password sementara pengguna.");
+      return;
+    }
+
+    if (!isEditing && roleNeedsAssignment && !form.assignedProjectId) {
       alert("Sila pilih tajuk projek untuk role ini.");
       return;
     }
@@ -245,24 +320,24 @@ export default function UsersPage() {
     try {
       setErrorMessage("");
 
-      const token = getAuthToken();
+      const userPayload = {
+        name: form.name.trim(),
+        email: form.email.trim(),
+        username: form.email.trim(),
+        role: form.role,
+        organization: form.organization.trim() || "CIDB Malaysia",
+        ...(!isEditing ? { status: "ACTIVE" } : {}),
+        ...(form.password.trim() ? { password: form.password } : {}),
+      };
 
-      const userRes = await fetch(`${API_URL}/users/`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          name: form.name.trim(),
-          email: form.email.trim(),
-          username: form.email.trim(),
-          password: form.password,
-          role: form.role,
-          organization: form.organization.trim() || "CIDB Malaysia",
-          status: "ACTIVE",
-        }),
-      });
+      const userRes = await fetch(
+        isEditing ? `${API_URL}/users/${editingUserId}` : `${API_URL}/users/`,
+        {
+          method: isEditing ? "PATCH" : "POST",
+          headers: getAuthHeaders(true),
+          body: JSON.stringify(userPayload),
+        }
+      );
 
       if (!userRes.ok) {
         const text = await userRes.text();
@@ -271,56 +346,79 @@ export default function UsersPage() {
           const errorData = JSON.parse(text);
           throw new Error(errorData.detail || text);
         } catch {
-          throw new Error(text || "Gagal tambah pengguna.");
+          throw new Error(text || "Gagal simpan pengguna.");
         }
       }
 
-      const createdUser = await userRes.json();
+      const savedUser = await userRes.json();
 
-      if (roleNeedsAssignment) {
-        const assignmentRes = await fetch(`${API_URL}/project-assignments/`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({
-            project_id: Number(form.assignedProjectId),
-            user_id: createdUser.id,
-            assignment_role: form.role,
-            status: "ACTIVE",
-          }),
-        });
-
-        if (!assignmentRes.ok) {
-          const text = await assignmentRes.text();
-
-          try {
-            const errorData = JSON.parse(text);
-            throw new Error(errorData.detail || text);
-          } catch {
-            throw new Error(text || "Gagal tambah tugasan projek.");
-          }
-        }
+      if (!isEditing && roleNeedsAssignment) {
+        await createAssignment(savedUser.id, form.assignedProjectId, form.role);
       }
 
-      setForm({
-        name: "",
-        email: "",
-        password: "",
-        role: "FACILITATOR",
-        organization: "CIDB Malaysia",
-        assignedProjectId: "",
+      resetForm();
+      await loadUsers();
+    } catch (error) {
+      console.error("Gagal simpan user:", error);
+
+      const message =
+        error instanceof Error ? error.message : "Gagal simpan pengguna.";
+
+      alert(message);
+    }
+  }
+
+  async function handleAddAssignment() {
+    if (!editingUserId || !form.assignedProjectId) {
+      alert("Sila pilih tajuk projek untuk ditambah.");
+      return;
+    }
+
+    const duplicate = getUserAssignments(editingUserId).some(
+      (assignment) => assignment.project_id === Number(form.assignedProjectId)
+    );
+
+    if (duplicate) {
+      alert("Projek/tajuk ini sudah ditugaskan kepada pengguna ini.");
+      return;
+    }
+
+    try {
+      await createAssignment(editingUserId, form.assignedProjectId, form.role);
+      setForm((prev) => ({ ...prev, assignedProjectId: "" }));
+      await loadUsers();
+    } catch (error) {
+      console.error("Gagal tambah tugasan:", error);
+      alert(error instanceof Error ? error.message : "Gagal tambah tugasan.");
+    }
+  }
+
+  async function handleRemoveAssignment(assignmentId: number) {
+    const confirmed = window.confirm("Buang tugasan projek/tajuk ini?");
+
+    if (!confirmed) return;
+
+    try {
+      const res = await fetch(`${API_URL}/project-assignments/${assignmentId}`, {
+        method: "DELETE",
+        headers: getAuthHeaders(),
       });
+
+      if (!res.ok) {
+        const text = await res.text();
+
+        try {
+          const errorData = JSON.parse(text);
+          throw new Error(errorData.detail || text);
+        } catch {
+          throw new Error(text || "Gagal buang tugasan projek.");
+        }
+      }
 
       await loadUsers();
     } catch (error) {
-      console.error("Gagal tambah user:", error);
-
-      const message =
-        error instanceof Error ? error.message : "Gagal tambah pengguna.";
-
-      alert(message);
+      console.error("Gagal buang tugasan:", error);
+      alert(error instanceof Error ? error.message : "Gagal buang tugasan.");
     }
   }
 
@@ -332,15 +430,23 @@ export default function UsersPage() {
     const nextStatus: UserStatus =
       user.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
 
-    try {
-      const token = getAuthToken();
+    if (user.id === currentUser.id && nextStatus === "INACTIVE") {
+      alert("Akaun sendiri tidak boleh dinyahaktifkan.");
+      return;
+    }
 
+    const confirmed = window.confirm(
+      nextStatus === "INACTIVE"
+        ? "Nyahaktif pengguna ini? Pengguna tidak boleh login selepas dinyahaktifkan."
+        : "Aktifkan semula pengguna ini?"
+    );
+
+    if (!confirmed) return;
+
+    try {
       const res = await fetch(`${API_URL}/users/${userId}`, {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        headers: getAuthHeaders(true),
         body: JSON.stringify({
           status: nextStatus,
         }),
@@ -378,10 +484,12 @@ export default function UsersPage() {
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 px-6 py-5">
             <h2 className="text-lg font-bold text-slate-900">
-              Daftar Pengguna
+              {isEditing ? "Kemaskini Pengguna" : "Daftar Pengguna"}
             </h2>
             <p className="mt-1 text-sm text-slate-500">
-              Tetapkan role dan projek/tajuk yang berkaitan.
+              {isEditing
+                ? "Kemaskini profil dan tambah atau buang projek/tajuk."
+                : "Tetapkan role dan projek/tajuk yang berkaitan."}
             </p>
           </div>
 
@@ -412,7 +520,7 @@ export default function UsersPage() {
 
             <div>
               <label className="mb-2 block text-sm font-semibold text-slate-700">
-                Password Sementara
+                {isEditing ? "Reset Password (optional)" : "Password Sementara"}
               </label>
               <input
                 type="password"
@@ -421,7 +529,11 @@ export default function UsersPage() {
                   updateForm("password", event.target.value)
                 }
                 className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                placeholder="Masukkan password sementara"
+                placeholder={
+                  isEditing
+                    ? "Biarkan kosong jika tidak mahu tukar password"
+                    : "Masukkan password sementara"
+                }
               />
             </div>
 
@@ -461,8 +573,39 @@ export default function UsersPage() {
             {needsProjectAssignment(form.role) ? (
               <div>
                 <label className="mb-2 block text-sm font-semibold text-slate-700">
-                  Tajuk Projek Ditugaskan
+                  {isEditing
+                    ? "Tambah Projek/Tajuk"
+                    : "Tajuk Projek Ditugaskan"}
                 </label>
+
+                {isEditing && editingUserId ? (
+                  <div className="mb-3 space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    {getUserAssignments(editingUserId).length > 0 ? (
+                      getUserAssignments(editingUserId).map((assignment) => (
+                        <div
+                          key={assignment.id}
+                          className="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2 text-sm"
+                        >
+                          <span className="text-slate-700">
+                            {formatProjectTitle(assignment.project_id)}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveAssignment(assignment.id)}
+                            className="shrink-0 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50"
+                          >
+                            Buang
+                          </button>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-sm text-slate-500">
+                        Tiada projek/tajuk ditugaskan.
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+
                 <select
                   value={form.assignedProjectId}
                   onChange={(event) =>
@@ -478,17 +621,39 @@ export default function UsersPage() {
                     </option>
                   ))}
                 </select>
+
+                {isEditing ? (
+                  <button
+                    type="button"
+                    onClick={handleAddAssignment}
+                    className="mt-3 w-full rounded-xl border border-blue-200 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-50"
+                  >
+                    Tambah Projek/Tajuk
+                  </button>
+                ) : null}
               </div>
             ) : null}
 
-            <button
-              type="button"
-              onClick={handleAddUser}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white transition hover:bg-blue-700"
-            >
-              <UserPlus size={18} />
-              Tambah Pengguna
-            </button>
+            <div className="flex gap-3">
+              {isEditing ? (
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  className="w-32 rounded-xl border border-slate-200 px-5 py-3 font-semibold text-slate-700 transition hover:bg-slate-50"
+                >
+                  Batal
+                </button>
+              ) : null}
+
+              <button
+                type="button"
+                onClick={handleSubmitUser}
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white transition hover:bg-blue-700"
+              >
+                <UserPlus size={18} />
+                {isEditing ? "Simpan Kemaskini" : "Tambah Pengguna"}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -593,6 +758,7 @@ export default function UsersPage() {
                         <div className="flex items-center justify-center gap-2">
                           <button
                             type="button"
+                            onClick={() => startEditUser(user)}
                             className="rounded-lg border border-slate-200 p-2 hover:bg-slate-100"
                             title="Kemaskini pengguna"
                           >
