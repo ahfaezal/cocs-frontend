@@ -147,9 +147,9 @@ export function ProjectTable({ projects }: { projects: ProjectItem[] }) {
 
                         {canEditProject ? (
                           <Link
-                            href={`/cos?projectId=${item.id}`}
+                            href={`/projects/new?projectId=${item.id}`}
                             className="rounded-lg border border-slate-200 p-2 hover:bg-slate-100"
-                            title="Sambung pembangunan projek dari COS"
+                            title="Kemaskini maklumat asas projek"
                           >
                             <Pencil size={16} />
                           </Link>

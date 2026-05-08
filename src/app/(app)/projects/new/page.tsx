@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import {
   ChevronRight,
   FileText,
@@ -22,16 +22,25 @@ import { API_URL } from "@/lib/env";
 import { hasPermission } from "@/lib/permissions";
 import { useCurrentUser } from "@/lib/use-current-user";
 
-export default function NewProjectPage() {
+function NewProjectPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const projectId = searchParams.get("projectId") || "";
+  const isEditMode = Boolean(projectId);
   const currentUser = useCurrentUser();
   const canCreateProject = hasPermission(currentUser.role, "project:create");
+  const canUpdateProject = hasPermission(
+    currentUser.role,
+    "content:update_assigned"
+  );
+  const canManageProject = isEditMode ? canUpdateProject : canCreateProject;
 
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
   const [form, setForm] = useState({
+  kodProjek: "",
   tajukProjek: "",
   jenis: "Baharu",
   tahap: "",
@@ -40,6 +49,7 @@ export default function NewProjectPage() {
   area: "",
   subarea: "",
   ringkasan: "",
+  status: "draft",
 });
 
   const selectedMSICGroups = getMSICGroupsBySection(form.sektor);
@@ -65,9 +75,62 @@ export default function NewProjectPage() {
     }));
   }
 
+  useEffect(() => {
+    if (!isEditMode) return;
+
+    async function loadProject() {
+      try {
+        setSaving(true);
+        setErrorMessage("");
+
+        const token = getAuthToken();
+        const res = await fetch(`${API_URL}/projects/${projectId}`, {
+          cache: "no-store",
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        });
+
+        if (!res.ok) {
+          throw new Error("Gagal memuatkan maklumat projek.");
+        }
+
+        const data = await res.json();
+
+        setForm({
+          kodProjek: data.project_code || data.code || "",
+          tajukProjek: data.project_title || data.title || "",
+          jenis: data.type || data.jenis || "Baharu",
+          tahap: String(data.level || data.tahap || ""),
+          sektor: data.sector || "",
+          subsektor: data.subsector || data.msic_code || "",
+          area: data.area || "",
+          subarea: data.subarea || "",
+          ringkasan: data.summary || data.description || "",
+          status: data.status || "draft",
+        });
+      } catch (error) {
+        console.error("Gagal load projek:", error);
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Gagal memuatkan maklumat projek."
+        );
+      } finally {
+        setSaving(false);
+      }
+    }
+
+    loadProject();
+  }, [isEditMode, projectId]);
+
   async function handleSaveDraft(next = false) {
-    if (!canCreateProject) {
-      setErrorMessage("Anda tidak mempunyai kebenaran untuk mencipta projek.");
+    if (!canManageProject) {
+      setErrorMessage(
+        isEditMode
+          ? "Anda tidak mempunyai kebenaran untuk mengemaskini projek."
+          : "Anda tidak mempunyai kebenaran untuk mencipta projek."
+      );
       return;
     }
 
@@ -94,7 +157,9 @@ export default function NewProjectPage() {
       const tahapNumber = Number(String(form.tahap).replace(/\D/g, "")) || 1;
       const tahunNumber = new Date().getFullYear();
 
-      const projectCode = `COCS/${tahunNumber}/${Date.now()
+      const projectCode = isEditMode
+        ? form.kodProjek
+        : `COCS/${tahunNumber}/${Date.now()
         .toString()
         .slice(-4)}`;
 
@@ -129,21 +194,24 @@ export default function NewProjectPage() {
 
         msic_code: form.subsektor,
 
-        status: "draft",
+        status: form.status || "draft",
         progress: 0,
       };
 
 
       const token = getAuthToken();
 
-      const res = await fetch(`${API_URL}/projects/`, {
-        method: "POST",
+      const res = await fetch(
+        isEditMode ? `${API_URL}/projects/${projectId}` : `${API_URL}/projects/`,
+        {
+        method: isEditMode ? "PATCH" : "POST",
         headers: {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify(payload),
-      });
+        }
+      );
 
       const responseText = await res.text();
 
@@ -170,7 +238,11 @@ export default function NewProjectPage() {
 
       const result = responseText ? JSON.parse(responseText) : null;
 
-      setMessage("Projek berjaya disimpan sebagai draf.");
+      setMessage(
+        isEditMode
+          ? "Projek berjaya dikemaskini."
+          : "Projek berjaya disimpan sebagai draf."
+      );
 
       if (next) {
         router.push("/projects");
@@ -190,11 +262,13 @@ export default function NewProjectPage() {
     }
   }
 
-  if (!canCreateProject) {
+  if (!canManageProject) {
     return (
       <div className="space-y-6">
         <div className="rounded-2xl border border-red-200 bg-red-50 px-6 py-5 text-sm font-medium text-red-700">
-          Anda tidak mempunyai kebenaran untuk mencipta projek baharu.
+          {isEditMode
+            ? "Anda tidak mempunyai kebenaran untuk mengemaskini projek."
+            : "Anda tidak mempunyai kebenaran untuk mencipta projek baharu."}
         </div>
 
         <Link
@@ -218,7 +292,7 @@ export default function NewProjectPage() {
             <span>Permohonan Projek</span>
             <ChevronRight size={16} />
             <span className="font-medium text-blue-700">
-              Cipta Projek Baharu
+              {isEditMode ? "Kemaskini Projek" : "Cipta Projek Baharu"}
             </span>
           </div>
 
@@ -228,10 +302,12 @@ export default function NewProjectPage() {
             </div>
             <div>
               <h1 className="text-4xl font-bold tracking-tight text-slate-900">
-                Cipta Projek Baharu
+                {isEditMode ? "Kemaskini Projek" : "Cipta Projek Baharu"}
               </h1>
               <p className="mt-1 text-base text-slate-500">
-                Lengkapkan maklumat asas untuk memulakan pembangunan COCS.
+                {isEditMode
+                  ? "Kemaskini maklumat asas projek COCS."
+                  : "Lengkapkan maklumat asas untuk memulakan pembangunan COCS."}
               </p>
             </div>
           </div>
@@ -267,6 +343,20 @@ export default function NewProjectPage() {
               MAKLUMAT ASAS PROJEK
             </h2>
           </div>
+
+      {isEditMode ? (
+        <div className="xl:col-span-12">
+          <label className="mb-2 block text-sm font-semibold text-slate-700">
+            Kod Projek
+          </label>
+          <input
+            value={form.kodProjek}
+            onChange={(e) => updateField("kodProjek", e.target.value)}
+            className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            placeholder="Contoh: COCS/2026/0001"
+          />
+        </div>
+      ) : null}
           
       <div className="xl:col-span-8">
         <label className="mb-2 block text-sm font-semibold text-slate-700">
@@ -379,6 +469,25 @@ export default function NewProjectPage() {
         />
       </div>
 
+      {isEditMode ? (
+        <div className="xl:col-span-6">
+          <label className="mb-2 block text-sm font-semibold text-slate-700">
+            Status
+          </label>
+          <select
+            value={form.status}
+            onChange={(e) => updateField("status", e.target.value)}
+            className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+          >
+            <option value="draft">Draft</option>
+            <option value="active">Aktif</option>
+            <option value="review">Menunggu Semakan</option>
+            <option value="completed">Selesai</option>
+            <option value="archived">Arkib</option>
+          </select>
+        </div>
+      ) : null}
+
       <div className="xl:col-span-6">
         <label className="mb-2 block text-sm font-semibold text-slate-700">
           Subarea
@@ -398,12 +507,30 @@ export default function NewProjectPage() {
               disabled={saving}
               className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:opacity-60"
             >
-              {saving ? "Menyimpan..." : "Seterusnya"}
+              {saving
+                ? "Menyimpan..."
+                : isEditMode
+                  ? "Simpan Kemaskini"
+                  : "Seterusnya"}
               <ArrowRight size={16} />
             </button>
           </div>
         </div>
       </div>
     </div>
+  );
+}
+
+export default function NewProjectPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
+          Memuatkan borang projek...
+        </div>
+      }
+    >
+      <NewProjectPageContent />
+    </Suspense>
   );
 }
