@@ -1059,65 +1059,12 @@ function CSPPageContent() {
             />
 
             <div className="space-y-6">
-              {activeBuilderSection === "1" ? (
-                <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                  <div className="border-b border-slate-200 px-6 py-5">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <h2 className="text-xl font-bold text-blue-700">
-                          1. Introduction
-                        </h2>
-                        <p className="mt-1 text-sm text-slate-500">
-                          Lengkapkan seksyen pengenalan bagi dokumen CSP.
-                        </p>
-                      </div>
-
-                      <span className="rounded-full bg-emerald-100 px-3 py-1 text-sm font-semibold text-emerald-700">
-                        Draf CSP
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="space-y-6 px-6 py-6">
-                    <div>
-                      <label className="mb-2 block text-sm font-semibold text-slate-700">
-                        Latar Belakang
-                      </label>
-                      <textarea
-                        className="min-h-[160px] w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                        defaultValue={`Industri pembinaan di Malaysia memainkan peranan penting dalam pembangunan infrastruktur dan kemudahan awam serta swasta. ${standardTitle} merupakan pekerjaan dalam ${projectInfo.subsector} yang memerlukan kompetensi selaras dengan struktur pekerjaan, tahap kemahiran dan keperluan industri.`}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-2 block text-sm font-semibold text-slate-700">
-                        Industry Overview
-                      </label>
-                      <textarea
-                        className="min-h-[140px] w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                        defaultValue={`Sektor ${projectInfo.sector} merangkumi bidang ${projectInfo.subsector}. Pembangunan standard bagi ${standardTitle} membantu memastikan tenaga kerja mempunyai pengetahuan, kemahiran dan amalan kerja yang konsisten dengan keperluan semasa industri pembinaan.`}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-2 block text-sm font-semibold text-slate-700">
-                        Occupational Definition
-                      </label>
-                      <textarea
-                        className="min-h-[140px] w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                        defaultValue={`${standardTitle} ${formatLevel(standardLevel)} ialah personel yang melaksanakan aktiviti kerja dalam ${careerPath} mengikut prosedur, spesifikasi, keperluan keselamatan dan standard kualiti yang ditetapkan.`}
-                      />
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <CSPBuilderSectionPanel
-                  section={activeBuilderDetail}
-                  standardTitle={standardTitle}
-                  standardLevel={standardLevel}
-                  careerPath={careerPath}
-                />
-              )}
+              <CSPBuilderSectionPanel
+                section={activeBuilderDetail}
+                standardTitle={standardTitle}
+                standardLevel={standardLevel}
+                careerPath={careerPath}
+              />
 
               <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <div className="border-b border-slate-200 px-6 py-5">
