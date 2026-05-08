@@ -359,6 +359,7 @@ function CSPDocumentMode({
   matrix,
   competencies,
   committeeMembers,
+  cspSections,
 }: {
   projectInfo: ProjectInfo;
   standardTitle: string;
@@ -367,7 +368,24 @@ function CSPDocumentMode({
   matrix: COSMatrix | null;
   competencies: CompetencySummary[];
   committeeMembers: CommitteeMember[];
+  cspSections: Record<string, string>;
 }) {
+  const renderSavedSection = (sectionNo: string) => {
+    const detail = CSP_BUILDER_SECTION_DETAILS[sectionNo];
+    const content = cspSections[sectionNo]?.trim();
+
+    if (!detail || !content) return null;
+
+    return (
+      <section className="border border-slate-300 p-6">
+        <h2 className="text-lg font-bold text-slate-900">{detail.title}</h2>
+        <div className="mt-4 whitespace-pre-line text-sm leading-7 text-slate-900">
+          {content}
+        </div>
+      </section>
+    );
+  };
+
   return (
     <div className="space-y-6 rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
       <section className="min-h-[520px] border border-slate-300 p-8 text-center">
@@ -443,6 +461,27 @@ function CSPDocumentMode({
           </tbody>
         </table>
       </section>
+
+      {[
+        "prakata",
+        "abbreviation",
+        "glossary",
+        "figures",
+        "acknowledgement",
+        "1",
+        "1.1",
+        "1.2",
+        "1.3",
+        "1.4",
+        "1.5",
+        "1.6",
+        "2",
+        "2.1",
+      ].map((sectionNo) => (
+        <div key={`csp-doc-saved-${sectionNo}`}>
+          {renderSavedSection(sectionNo)}
+        </div>
+      ))}
 
       <section className="border border-slate-300 p-6">
         <h2 className="text-lg font-bold text-slate-900">
@@ -527,6 +566,12 @@ function CSPDocumentMode({
           </div>
         )}
       </section>
+
+      {["2.3", "2.4", "2.5", "3"].map((sectionNo) => (
+        <div key={`csp-doc-saved-${sectionNo}`}>
+          {renderSavedSection(sectionNo)}
+        </div>
+      ))}
 
       <section className="border border-slate-300 p-6">
         <h2 className="text-lg font-bold text-slate-900">
@@ -1178,6 +1223,7 @@ function CSPPageContent() {
           matrix={matrix}
           competencies={competencies}
           committeeMembers={committeeMembers}
+          cspSections={cspSections}
         />
       ) : (
         <>
