@@ -61,6 +61,52 @@ type CompetencySummary = {
 };
 
 const LEVELS = [6, 5, 4, 3, 2, 1];
+const ORGANISATION_REFERENCES = [
+  {
+    name: "Construction Industry Development Board Malaysia (CIDB)",
+    lines: [
+      "Tingkat 11, CIDB 520",
+      "The MET Corporate Towers",
+      "No 20 Jalan Dutamas 2",
+      "50480 Kuala Lumpur",
+      "03-5567 3300",
+      "http://www.cidb.gov.my",
+      "cidb@cidb.gov.my",
+    ],
+  },
+  {
+    name: "Petroliam Nasional Berhad (PETRONAS)",
+    lines: [
+      "Tower 1, Petronas Towers",
+      "50088 Kuala Lumpur",
+      "03-2051 5000",
+      "https://www.petronas.com",
+      "media@petronas.com",
+    ],
+  },
+  {
+    name: "Malaysia Marine & Heavy Engineering Holdings Berhad (MMHE)",
+    lines: [
+      "Level 31, Dayabumi,",
+      "Jalan Sultan Hishamuddin, City Centre,",
+      "50050 Kuala Lumpur",
+      "03-2273 0266",
+      "https://mhb.com.my/",
+    ],
+  },
+  {
+    name: "Petra Resources Sdn Bhd",
+    lines: [
+      "4th Floor, Menara OBYU,",
+      "4, Jalan PJU 8/8A,",
+      "Bandar Damansara Perdana,",
+      "47820 Petaling Jaya,",
+      "Selangor",
+      "03-7726 5576",
+      "https://www.petraenergy.com.my",
+    ],
+  },
+];
 
 function formatLevel(level: string) {
   return level && level !== "-" ? `Tahap ${level}` : "-";
@@ -75,6 +121,10 @@ function slugify(value: string) {
 
 function pad(value: number) {
   return String(value).padStart(2, "0");
+}
+
+function alphabetMarker(index: number) {
+  return `${String.fromCharCode(97 + index)})`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -327,16 +377,24 @@ function CSPDocumentMode({
 
         {competencies.length > 0 ? (
           <div className="mt-4">
-            <ol className="list-[lower-alpha] space-y-1 pl-6 text-sm font-semibold leading-6 text-slate-900">
+            <div className="space-y-1 text-sm font-semibold leading-6 text-slate-900">
               {competencies.map((competency, competencyIndex) => (
-                <li key={`csp-competency-list-${competency.code}`}>
-                  {competency.title}
-                  {competencyIndex === competencies.length - 2
-                    ? "; and"
-                    : ";"}
-                </li>
+                <div
+                  key={`csp-competency-list-${competency.code}`}
+                  className="flex gap-3"
+                >
+                  <span className="w-6 shrink-0">
+                    {alphabetMarker(competencyIndex)}
+                  </span>
+                  <span>
+                    {competency.title}
+                    {competencyIndex === competencies.length - 2
+                      ? "; and"
+                      : ";"}
+                  </span>
+                </div>
               ))}
-            </ol>
+            </div>
           </div>
         ) : (
           <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
@@ -344,6 +402,38 @@ function CSPDocumentMode({
             sebelum menjana seksyen ini.
           </div>
         )}
+      </section>
+
+      <section className="border border-slate-300 p-6">
+        <h2 className="text-lg font-bold text-slate-900">
+          5. Organisation Reference for Sources of Additional Information
+        </h2>
+
+        <p className="mt-3 text-sm leading-6 text-slate-700">
+          The following organisations can be referred as sources of additional
+          information which can assist in defining the document&apos;s contents.
+        </p>
+
+        <div className="mt-4 space-y-4 text-sm leading-6 text-slate-900">
+          {ORGANISATION_REFERENCES.map((organisation, organisationIndex) => (
+            <div
+              key={`csp-organisation-${organisation.name}`}
+              className="flex gap-3"
+            >
+              <span className="w-6 shrink-0">
+                {alphabetMarker(organisationIndex)}
+              </span>
+              <div>
+                <div className="font-semibold">{organisation.name}</div>
+                {organisation.lines.map((line, lineIndex) => (
+                  <div key={`csp-organisation-${organisation.name}-${lineIndex}`}>
+                    {line}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
       </section>
     </div>
   );
