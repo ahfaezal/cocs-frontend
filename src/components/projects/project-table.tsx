@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { Eye, Pencil, MoreVertical, Trash2 } from "lucide-react";
 
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -13,6 +14,7 @@ import type { ProjectItem } from "@/types/project";
 
 export function ProjectTable({ projects }: { projects: ProjectItem[] }) {
   const currentUser = useCurrentUser();
+  const [openMenuId, setOpenMenuId] = useState<number | null>(null);
 
   const canEditProject = hasPermission(
     currentUser.role,
@@ -166,13 +168,43 @@ export function ProjectTable({ projects }: { projects: ProjectItem[] }) {
                           </button>
                         ) : null}
 
-                        <button
-                          type="button"
-                          className="rounded-lg border border-slate-200 p-2 hover:bg-slate-100"
-                          title="Lagi tindakan"
-                        >
-                          <MoreVertical size={16} />
-                        </button>
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setOpenMenuId((current) =>
+                                current === item.id ? null : item.id
+                              )
+                            }
+                            className="rounded-lg border border-slate-200 p-2 hover:bg-slate-100"
+                            title="Lagi tindakan"
+                          >
+                            <MoreVertical size={16} />
+                          </button>
+
+                          {openMenuId === item.id ? (
+                            <div className="absolute right-0 z-20 mt-2 w-44 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 text-left shadow-lg">
+                              <Link
+                                href={`/cos?projectId=${item.id}`}
+                                className="block px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                              >
+                                Buka COS
+                              </Link>
+                              <Link
+                                href={`/ccpc?projectId=${item.id}`}
+                                className="block px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                              >
+                                Buka CCPC
+                              </Link>
+                              <Link
+                                href={`/ccp?projectId=${item.id}`}
+                                className="block px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                              >
+                                Buka CCP
+                              </Link>
+                            </div>
+                          ) : null}
+                        </div>
                       </div>
                     </td>
                   </tr>
