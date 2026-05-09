@@ -10,7 +10,9 @@ import {
   Eye,
   FileText,
   Info,
+  Plus,
   Save,
+  Trash2,
 } from "lucide-react";
 
 import { CSPDocumentHeader } from "@/components/csp/csp-document-header";
@@ -80,6 +82,17 @@ type CommitteeMember = {
   name: string;
   organization: string;
   role: string;
+};
+
+type CommitteeRow = {
+  left: string;
+  right: string;
+};
+
+type StandardDevelopmentCommittee = {
+  committee: CommitteeRow[];
+  secretariat: CommitteeRow[];
+  facilitator: CommitteeRow[];
 };
 
 type CSPBuilderSectionKind = "manual" | "auto" | "fixed";
@@ -308,12 +321,13 @@ function getDefaultCSPSectionContent(
 
   if (sectionNo === "3") {
     return [
-      "Level 1: Competent in performing a limited range of routine and predictable work activities under supervision.",
-      "Level 2: Competent in performing a range of varied work activities in a variety of contexts, with some individual responsibility.",
-      "Level 3: Competent in performing a broad range of work activities, with responsibility for own work and some responsibility for others.",
-      "Level 4: Competent in performing complex technical or supervisory work activities with responsibility for work outcomes.",
-      "Level 5: Competent in managing work processes, resources and teams within a defined operational area.",
-      "Level 6: Competent in providing strategic, managerial and expert-level direction for occupational practice.",
+      "The COCS is developed for various occupational areas. Below is a guideline of each COCS Level as defined by the Construction Skills Qualification Framework (CSQF).",
+      "Level 1: This level qualifies individuals who are competent with basic general and foundation knowledge and skills in a narrow range of areas of a field of work or learning in the construction industry and/or its respective sectors with close supervision.",
+      "Level 2: This level qualifies individuals who are competent with basic factual or operational knowledge and skills in a selected number of areas of a field of work or learning in the construction industry and/or its respective sectors, and with limited autonomy and judgments to complete routine but variable tasks under the observation of supervisors.",
+      "Level 3: This level qualifies individuals who are competent with broad operational and theoretical knowledge and skills of a field of work or learning in the construction industry and/or its respective sectors and perform clearly defined but limited responsibility in varied contexts to undertake skilled work.",
+      "Level 4: This level qualifies individuals who competent with a broad knowledge base with some specialised knowledge and skills of a field of work or learning in the construction industry and/or its respective sectors, and with initiative and judgment to organise the work of self and others and plan, coordinate and evaluate the work of teams within broad but generally well-defined parameters.",
+      "Level 5: This level qualifies individuals who are competent in applying an integrated technical and theoretical concept in a broad range of contexts in the construction industry and/or its respective sectors to undertake advanced skilled or professional work and with initiative and judgment to organise the work of self and others and plan, coordinate and evaluate the work of teams within broad but generally specialised parameters.",
+      "Level 6: This level qualifies individuals who are competent in applying a specialised knowledge in a range of environment to undertake advanced skilled or professional work and across a broad range of technical or management functions and systematically and effectively resolve complicated and unpredictable issues.",
     ].join("\n");
   }
 
@@ -339,6 +353,70 @@ function pad(value: number) {
 
 function alphabetMarker(index: number) {
   return `${String.fromCharCode(97 + index)})`;
+}
+
+function createEmptyCommitteeRows(count: number): CommitteeRow[] {
+  return Array.from({ length: count }, () => ({ left: "", right: "" }));
+}
+
+function parseCommitteeRows(value?: string, count = 4): CommitteeRow[] {
+  if (!value) return createEmptyCommitteeRows(count);
+
+  try {
+    const parsed = JSON.parse(value) as unknown;
+
+    if (!Array.isArray(parsed)) return createEmptyCommitteeRows(count);
+
+    return parsed.map((row) => {
+      if (!isRecord(row)) return { left: "", right: "" };
+
+      return {
+        left: cleanText(row.left),
+        right: cleanText(row.right),
+      };
+    });
+  } catch {
+    return createEmptyCommitteeRows(count);
+  }
+}
+
+function stringifyCommitteeRows(rows: CommitteeRow[]) {
+  return JSON.stringify(rows);
+}
+
+function parseDevelopmentCommittee(
+  value?: string
+): StandardDevelopmentCommittee {
+  const fallback = {
+    committee: createEmptyCommitteeRows(10),
+    secretariat: createEmptyCommitteeRows(4),
+    facilitator: createEmptyCommitteeRows(1),
+  };
+
+  if (!value) return fallback;
+
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!isRecord(parsed)) return fallback;
+
+    return {
+      committee: Array.isArray(parsed.committee)
+        ? parseCommitteeRows(JSON.stringify(parsed.committee), 10)
+        : fallback.committee,
+      secretariat: Array.isArray(parsed.secretariat)
+        ? parseCommitteeRows(JSON.stringify(parsed.secretariat), 4)
+        : fallback.secretariat,
+      facilitator: Array.isArray(parsed.facilitator)
+        ? parseCommitteeRows(JSON.stringify(parsed.facilitator), 1)
+        : fallback.facilitator,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+function stringifyDevelopmentCommittee(data: StandardDevelopmentCommittee) {
+  return JSON.stringify(data);
 }
 
 function formatCommitteeRole(role: string) {
@@ -473,6 +551,27 @@ function CSPDocumentMode({
       </section>
     );
   };
+
+  const renderTwoColumnRows = (rows: CommitteeRow[]) =>
+    rows.map((row, index) => (
+      <tr key={`committee-row-${index}`}>
+        <td className="h-9 border border-black px-3 py-2">{row.left}</td>
+        <td className="h-9 border border-black px-3 py-2">{row.right}</td>
+      </tr>
+    ));
+
+  const technicalCommitteeRows = parseCommitteeRows(cspSections["6"], 4);
+  const savedDevelopmentCommittee = parseDevelopmentCommittee(cspSections["7"]);
+  const developmentCommittee =
+    !cspSections["7"]?.trim() && committeeMembers.length > 0
+      ? {
+          ...savedDevelopmentCommittee,
+          committee: committeeMembers.map((member) => ({
+            left: member.name,
+            right: `${member.organization} - ${member.role}`,
+          })),
+        }
+      : savedDevelopmentCommittee;
 
   return (
     <div className="space-y-6 rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
@@ -741,64 +840,254 @@ function CSPDocumentMode({
         )}
       </section>
 
-      {renderSavedSection("6")}
+      <section className="border border-slate-300 p-6">
+        <h2 className="text-lg font-bold text-slate-900">
+          6. Standard Technical Evaluation Committee
+        </h2>
+
+        <table className="mt-5 w-[520px] max-w-full border border-black text-sm text-black">
+          <tbody>{renderTwoColumnRows(technicalCommitteeRows)}</tbody>
+        </table>
+      </section>
 
       <section className="border border-slate-300 p-6">
         <h2 className="text-lg font-bold text-slate-900">
           7. Standard Development Committee
         </h2>
 
-        <div className="mt-4 text-center text-sm font-bold uppercase text-slate-900">
-          {standardTitle}
+        <div className="mt-4 text-center text-lg uppercase text-slate-900">
+          {careerPath}
         </div>
-        <div className="mt-1 text-center text-sm font-bold uppercase text-slate-900">
+        <div className="mt-2 text-center text-lg uppercase text-slate-900">
           {formatLevel(standardLevel)}
         </div>
 
-        {committeeMembers.length > 0 ? (
-          <table className="mt-4 w-full border border-black text-sm text-black">
-            <thead>
-              <tr className="bg-slate-200">
-                <th className="w-16 border border-black px-3 py-2 text-center">
-                  No.
-                </th>
-                <th className="border border-black px-3 py-2 text-left">
-                  Name
-                </th>
-                <th className="border border-black px-3 py-2 text-left">
-                  Organisation
-                </th>
-                <th className="w-40 border border-black px-3 py-2 text-left">
-                  Role
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {committeeMembers.map((member, memberIndex) => (
-                <tr key={`csp-committee-${member.name}-${memberIndex}`}>
-                  <td className="border border-black px-3 py-2 text-center">
-                    {memberIndex + 1}
-                  </td>
-                  <td className="border border-black px-3 py-2">
-                    {member.name}
-                  </td>
-                  <td className="border border-black px-3 py-2">
-                    {member.organization}
-                  </td>
-                  <td className="border border-black px-3 py-2">
-                    {member.role}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
-            Senarai ahli panel belum tersedia. Tetapkan pengguna kepada projek
-            ini melalui modul Pengguna.
-          </div>
-        )}
+        <table className="mt-4 w-full border border-black text-sm text-black">
+          <tbody>
+            {renderTwoColumnRows(developmentCommittee.committee)}
+            <tr>
+              <td
+                colSpan={2}
+                className="border border-black px-3 py-2 text-center text-lg uppercase"
+              >
+                Secretariat
+              </td>
+            </tr>
+            {renderTwoColumnRows(developmentCommittee.secretariat)}
+            <tr>
+              <td
+                colSpan={2}
+                className="border border-black px-3 py-2 text-center text-lg uppercase"
+              >
+                Facilitator
+              </td>
+            </tr>
+            {renderTwoColumnRows(developmentCommittee.facilitator)}
+          </tbody>
+        </table>
       </section>
+    </div>
+  );
+}
+
+function CSPCommitteeTableEditor({
+  title,
+  description,
+  content,
+  onContentChange,
+}: {
+  title: string;
+  description: string;
+  content?: string;
+  onContentChange: (content: string) => void;
+}) {
+  const rows = parseCommitteeRows(content, 4);
+
+  function updateRow(index: number, key: keyof CommitteeRow, value: string) {
+    const nextRows = rows.map((row, rowIndex) =>
+      rowIndex === index ? { ...row, [key]: value } : row
+    );
+    onContentChange(stringifyCommitteeRows(nextRows));
+  }
+
+  function addRow() {
+    onContentChange(stringifyCommitteeRows([...rows, { left: "", right: "" }]));
+  }
+
+  function deleteRow(index: number) {
+    onContentChange(stringifyCommitteeRows(rows.filter((_, i) => i !== index)));
+  }
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-6 py-5">
+        <div>
+          <h2 className="text-xl font-bold text-blue-700">{title}</h2>
+          <p className="mt-1 text-sm text-slate-500">{description}</p>
+        </div>
+        <button
+          type="button"
+          onClick={addRow}
+          className="inline-flex items-center gap-2 rounded-xl border border-blue-200 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-50"
+        >
+          <Plus size={16} />
+          Tambah Baris
+        </button>
+      </div>
+
+      <div className="space-y-3 p-6">
+        {rows.map((row, index) => (
+          <div
+            key={`committee-editor-${index}`}
+            className="grid grid-cols-[1fr_1fr_auto] gap-3"
+          >
+            <input
+              value={row.left}
+              onChange={(event) => updateRow(index, "left", event.target.value)}
+              className="rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
+              placeholder="Nama / jawatan"
+            />
+            <input
+              value={row.right}
+              onChange={(event) =>
+                updateRow(index, "right", event.target.value)
+              }
+              className="rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
+              placeholder="Organisasi / peranan"
+            />
+            <button
+              type="button"
+              onClick={() => deleteRow(index)}
+              className="rounded-xl border border-red-200 p-3 text-red-600 hover:bg-red-50"
+              title="Padam baris"
+            >
+              <Trash2 size={16} />
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CSPDevelopmentCommitteeEditor({
+  content,
+  onContentChange,
+}: {
+  content?: string;
+  onContentChange: (content: string) => void;
+}) {
+  const data = parseDevelopmentCommittee(content);
+
+  function updateGroup(
+    group: keyof StandardDevelopmentCommittee,
+    rows: CommitteeRow[]
+  ) {
+    onContentChange(
+      stringifyDevelopmentCommittee({
+        ...data,
+        [group]: rows,
+      })
+    );
+  }
+
+  function updateRow(
+    group: keyof StandardDevelopmentCommittee,
+    index: number,
+    key: keyof CommitteeRow,
+    value: string
+  ) {
+    updateGroup(
+      group,
+      data[group].map((row, rowIndex) =>
+        rowIndex === index ? { ...row, [key]: value } : row
+      )
+    );
+  }
+
+  function addRow(group: keyof StandardDevelopmentCommittee) {
+    updateGroup(group, [...data[group], { left: "", right: "" }]);
+  }
+
+  function deleteRow(group: keyof StandardDevelopmentCommittee, index: number) {
+    updateGroup(
+      group,
+      data[group].filter((_, rowIndex) => rowIndex !== index)
+    );
+  }
+
+  function renderGroup(
+    group: keyof StandardDevelopmentCommittee,
+    title: string
+  ) {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-bold uppercase text-slate-700">
+            {title}
+          </h3>
+          <button
+            type="button"
+            onClick={() => addRow(group)}
+            className="inline-flex items-center gap-2 rounded-lg border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50"
+          >
+            <Plus size={14} />
+            Tambah
+          </button>
+        </div>
+
+        {data[group].map((row, index) => (
+          <div
+            key={`${group}-editor-${index}`}
+            className="grid grid-cols-[1fr_1fr_auto] gap-3"
+          >
+            <input
+              value={row.left}
+              onChange={(event) =>
+                updateRow(group, index, "left", event.target.value)
+              }
+              className="rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
+              placeholder="Nama / jawatan"
+            />
+            <input
+              value={row.right}
+              onChange={(event) =>
+                updateRow(group, index, "right", event.target.value)
+              }
+              className="rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
+              placeholder="Organisasi / peranan"
+            />
+            <button
+              type="button"
+              onClick={() => deleteRow(group, index)}
+              className="rounded-xl border border-red-200 p-3 text-red-600 hover:bg-red-50"
+              title="Padam baris"
+            >
+              <Trash2 size={16} />
+            </button>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="border-b border-slate-200 px-6 py-5">
+        <h2 className="text-xl font-bold text-blue-700">
+          7. Standard Development Committee
+        </h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Lengkapkan senarai ahli pembangunan standard, sekretariat dan
+          fasilitator.
+        </p>
+      </div>
+
+      <div className="space-y-8 p-6">
+        {renderGroup("committee", "Committee Members")}
+        {renderGroup("secretariat", "Secretariat")}
+        {renderGroup("facilitator", "Facilitator")}
+      </div>
     </div>
   );
 }
@@ -1343,22 +1632,46 @@ function CSPPageContent() {
             />
 
             <div className="space-y-6">
-              <CSPBuilderSectionPanel
-                key={activeBuilderSection}
-                section={activeBuilderDetail}
-                standardTitle={standardTitle}
-                standardLevel={standardLevel}
-                careerPath={careerPath}
-                sector={projectInfo.sector}
-                subsector={projectInfo.subsector}
-                sectionContent={cspSections[activeBuilderSection]}
-                onContentChange={(content) =>
-                  setCspSections((prev) => ({
-                    ...prev,
-                    [activeBuilderSection]: content,
-                  }))
-                }
-              />
+              {activeBuilderSection === "6" ? (
+                <CSPCommitteeTableEditor
+                  title="6. Standard Technical Evaluation Committee"
+                  description="Lengkapkan nama dan organisasi/peranan jawatankuasa penilaian teknikal."
+                  content={cspSections["6"]}
+                  onContentChange={(content) =>
+                    setCspSections((prev) => ({
+                      ...prev,
+                      "6": content,
+                    }))
+                  }
+                />
+              ) : activeBuilderSection === "7" ? (
+                <CSPDevelopmentCommitteeEditor
+                  content={cspSections["7"]}
+                  onContentChange={(content) =>
+                    setCspSections((prev) => ({
+                      ...prev,
+                      "7": content,
+                    }))
+                  }
+                />
+              ) : (
+                <CSPBuilderSectionPanel
+                  key={activeBuilderSection}
+                  section={activeBuilderDetail}
+                  standardTitle={standardTitle}
+                  standardLevel={standardLevel}
+                  careerPath={careerPath}
+                  sector={projectInfo.sector}
+                  subsector={projectInfo.subsector}
+                  sectionContent={cspSections[activeBuilderSection]}
+                  onContentChange={(content) =>
+                    setCspSections((prev) => ({
+                      ...prev,
+                      [activeBuilderSection]: content,
+                    }))
+                  }
+                />
+              )}
 
               <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <div className="border-b border-slate-200 px-6 py-5">
