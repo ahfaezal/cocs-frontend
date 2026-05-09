@@ -368,6 +368,25 @@ function alphabetMarker(index: number) {
   return `${String.fromCharCode(97 + index)})`;
 }
 
+function parseCompetencyLevelContent(content: string) {
+  const lines = content
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  return {
+    introduction: lines[0] || "",
+    levels: lines.slice(1).map((line) => {
+      const [label, ...descriptionParts] = line.split(":");
+
+      return {
+        label: label.trim(),
+        description: descriptionParts.join(":").trim(),
+      };
+    }),
+  };
+}
+
 function createEmptyCommitteeRows(count: number): CommitteeRow[] {
   return Array.from({ length: count }, () => ({ left: "", right: "" }));
 }
@@ -545,15 +564,15 @@ function CSPDocumentMode({
 
     if (!detail) return null;
 
+    const defaultContent = getDefaultCSPSectionContent(
+      sectionNo,
+      detail,
+      standardTitle,
+      standardLevel,
+      careerPath
+    );
     const content =
-      cspSections[sectionNo]?.trim() ||
-      getDefaultCSPSectionContent(
-        sectionNo,
-        detail,
-        standardTitle,
-        standardLevel,
-        careerPath
-      );
+      sectionNo === "3" ? defaultContent : cspSections[sectionNo]?.trim() || defaultContent;
 
     if (sectionNo === "abbreviation" || sectionNo === "glossary") {
       const rows = parseCommitteeRows(content, sectionNo === "abbreviation" ? 7 : 3);
@@ -580,6 +599,33 @@ function CSPDocumentMode({
               ))}
             </tbody>
           </table>
+        </section>
+      );
+    }
+
+    if (sectionNo === "3") {
+      const competencyLevels = parseCompetencyLevelContent(content);
+
+      return (
+        <section className="border border-slate-300 p-6">
+          <h2 className="text-lg font-bold text-slate-900">{detail.title}</h2>
+          <p className="mt-4 max-w-3xl text-sm leading-6 text-slate-900">
+            {competencyLevels.introduction}
+          </p>
+
+          <div className="mt-5 space-y-5 text-sm leading-6 text-slate-900">
+            {competencyLevels.levels.map((level) => (
+              <div
+                key={level.label}
+                className="grid max-w-4xl grid-cols-[90px_minmax(0,1fr)] gap-4"
+              >
+                <div>
+                  {level.label === "Level 6" ? level.label : `${level.label}:`}
+                </div>
+                <div>{level.description}</div>
+              </div>
+            ))}
+          </div>
         </section>
       );
     }
@@ -1585,19 +1631,22 @@ function CSPPageContent() {
 
       const token = getAuthToken();
       const nextSections = Object.fromEntries(
-        Object.entries(CSP_BUILDER_SECTION_DETAILS).map(
-          ([sectionNo, detail]) => [
+        Object.entries(CSP_BUILDER_SECTION_DETAILS).map(([sectionNo, detail]) => {
+          const defaultContent = getDefaultCSPSectionContent(
             sectionNo,
-            cspSections[sectionNo]?.trim() ||
-              getDefaultCSPSectionContent(
-                sectionNo,
-                detail,
-                standardTitle,
-                standardLevel,
-                careerPath
-              ),
-          ]
-        )
+            detail,
+            standardTitle,
+            standardLevel,
+            careerPath
+          );
+
+          return [
+            sectionNo,
+            sectionNo === "3"
+              ? defaultContent
+              : cspSections[sectionNo]?.trim() || defaultContent,
+          ];
+        })
       );
 
       const res = await fetch(`${API_URL}/csp/content/${projectId}`, {
