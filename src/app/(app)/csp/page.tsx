@@ -370,6 +370,21 @@ function CSPDocumentMode({
   committeeMembers: CommitteeMember[];
   cspSections: Record<string, string>;
 }) {
+  const contentItems = [
+    "Prakata",
+    "Abbreviation",
+    "Glossary",
+    "List of Figure",
+    "Acknowledgement",
+    "1. Introduction",
+    "2. COCS Development Scope",
+    "3. Definition of Competency Levels",
+    "4. Occupational Competencies",
+    "5. Organisation Reference for Sources of Additional Information",
+    "6. Standard Technical Evaluation Committee",
+    "7. Standard Development Committee",
+  ];
+
   const renderSavedSection = (sectionNo: string) => {
     const detail = CSP_BUILDER_SECTION_DETAILS[sectionNo];
     const content = cspSections[sectionNo]?.trim();
@@ -388,6 +403,21 @@ function CSPDocumentMode({
 
   return (
     <div className="space-y-6 rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+      <section className="min-h-[520px] border border-slate-300 p-8 text-center">
+        <div className="mt-24 text-xl font-bold uppercase text-slate-900">
+          Construction Occupational Competency Standard
+        </div>
+        <div className="mt-12 text-2xl font-bold uppercase text-slate-900">
+          {standardTitle}
+        </div>
+        <div className="mt-3 text-lg font-semibold uppercase text-slate-700">
+          {careerPath}
+        </div>
+        <div className="mt-10 text-xl font-bold uppercase text-slate-900">
+          {formatLevel(standardLevel)}
+        </div>
+      </section>
+
       <section className="min-h-[520px] border border-slate-300 p-8 text-center">
         <div className="text-sm font-semibold text-slate-700">
           Lembaga Pembangunan Industri Pembinaan Malaysia (CIDB)
@@ -416,12 +446,39 @@ function CSPDocumentMode({
         </div>
       </section>
 
+      <section className="border border-slate-300 p-6">
+        <h2 className="text-center text-lg font-bold text-slate-900">
+          Kandungan
+        </h2>
+        <div className="mt-6 space-y-2 text-sm leading-6 text-slate-900">
+          {contentItems.map((item, index) => (
+            <div key={`csp-toc-${item}`} className="flex gap-4">
+              <span className="w-8 text-right">{index + 1}</span>
+              <span>{item}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {[
         "prakata",
         "abbreviation",
         "glossary",
         "figures",
         "acknowledgement",
+      ].map((sectionNo) => (
+        <div key={`csp-doc-saved-${sectionNo}`}>
+          {renderSavedSection(sectionNo)}
+        </div>
+      ))}
+
+      <section className="min-h-[260px] border border-slate-300 p-8 text-center">
+        <div className="mt-20 text-2xl font-bold uppercase tracking-wide text-slate-900">
+          Standard Practice
+        </div>
+      </section>
+
+      {[
         "1",
         "1.1",
         "1.2",
