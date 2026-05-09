@@ -9,6 +9,8 @@ type CSPGenerateRequest = {
   careerPath?: string;
   sector?: string;
   subsector?: string;
+  generationType?: "abbreviation" | "glossary";
+  documentContext?: string;
 };
 
 const openai = new OpenAI({
@@ -32,6 +34,56 @@ function buildFallback(body: CSPGenerateRequest) {
 }
 
 function buildPrompt(body: CSPGenerateRequest) {
+  if (body.generationType === "abbreviation") {
+    return `
+You are preparing the Abbreviation section for a Malaysia COCS/CSP document.
+
+Extract useful abbreviations from the document context and include common COCS abbreviations when relevant.
+
+Rules:
+- Return ONLY valid JSON. No markdown.
+- Use uppercase abbreviation keys.
+- Do not invent obscure abbreviations.
+- Keep 5 to 20 rows.
+- Prefer official meanings where known.
+
+Document context:
+${body.documentContext || "-"}
+
+JSON format:
+{
+  "rows": [
+    { "left": "CIDB", "right": "Construction Industry Development Board" }
+  ]
+}
+`;
+  }
+
+  if (body.generationType === "glossary") {
+    return `
+You are preparing the Glossary section for a Malaysia COCS/CSP document.
+
+Extract important terms from the document context and provide concise formal definitions.
+
+Rules:
+- Return ONLY valid JSON. No markdown.
+- Keep 5 to 20 rows.
+- Use clear terms in the "left" field.
+- Use concise Bahasa Melayu definitions in the "right" field.
+- Do not include abbreviations unless they are also technical terms.
+
+Document context:
+${body.documentContext || "-"}
+
+JSON format:
+{
+  "rows": [
+    { "left": "Competency", "right": "Keupayaan untuk melaksanakan kerja mengikut standard yang ditetapkan." }
+  ]
+}
+`;
+  }
+
   return `
 You are an expert in Malaysia COCS/CSP document development.
 
@@ -94,7 +146,57 @@ export async function POST(req: NextRequest) {
     const start = raw.indexOf("{");
     const end = raw.lastIndexOf("}");
     const jsonText = start >= 0 && end > start ? raw.slice(start, end + 1) : raw;
-    const parsed = JSON.parse(jsonText) as { content?: string };
+    const parsed = JSON.parse(jsonText) as {
+      content?: string;
+      rows?: { left?: string; right?: string }[];
+    };
+
+    if (body.generationType === "abbreviation" || body.generationType === "glossary") {
+      const rows = Array.isArray(parsed.rows)
+        ? parsed.rows
+            .map((row) => ({
+              left: cleanText(row.left),
+              right: cleanText(row.right),
+            }))
+            .filter((row) => row.left && row.right)
+        : [];
+
+      if (rows.length > 0) {
+        return NextResponse.json({
+          rows,
+          generatedAt: new Date().toISOString(),
+        });
+      }
+
+      return NextResponse.json({
+        rows:
+          body.generationType === "abbreviation"
+            ? [
+                {
+                  left: "CIDB",
+                  right: "Construction Industry Development Board",
+                },
+                {
+                  left: "COCS",
+                  right: "Construction Occupational Competency Standard",
+                },
+                { left: "CSP", right: "Construction Standard Practice" },
+              ]
+            : [
+                {
+                  left: "Competency",
+                  right:
+                    "Keupayaan untuk melaksanakan kerja mengikut standard yang ditetapkan.",
+                },
+                {
+                  left: "Standard Practice",
+                  right: "Amalan standard yang menjadi rujukan pelaksanaan kerja.",
+                },
+              ],
+        generatedAt: new Date().toISOString(),
+      });
+    }
+
     const content = cleanText(parsed.content);
 
     if (!content) {

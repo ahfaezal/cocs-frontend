@@ -282,6 +282,30 @@ function getDefaultCSPSectionContent(
   standardLevel: string,
   careerPath: string
 ) {
+  const defaultAbbreviations: CommitteeRow[] = [
+    { left: "CIDB", right: "Construction Industry Development Board" },
+    { left: "COCS", right: "Construction Occupational Competency Standard" },
+    { left: "COS", right: "Construction Occupational Structure" },
+    { left: "CCPC", right: "Construction Competency Profile Chart" },
+    { left: "CCP", right: "Construction Competency Profile" },
+    { left: "CSP", right: "Construction Standard Practice" },
+    { left: "CSQF", right: "Construction Skills Qualification Framework" },
+  ];
+  const defaultGlossary: CommitteeRow[] = [
+    {
+      left: "Competency",
+      right: "Keupayaan untuk melaksanakan kerja mengikut standard yang ditetapkan.",
+    },
+    {
+      left: "Occupational Structure",
+      right: "Struktur pekerjaan yang menunjukkan laluan kerjaya dan tahap kompetensi.",
+    },
+    {
+      left: "Standard Practice",
+      right: "Amalan standard yang menjadi rujukan pelaksanaan kerja.",
+    },
+  ];
+
   if (sectionNo === "prakata") {
     return [
       "Dokumen Standard Practice ini dibangunkan sebagai panduan kepada pihak berkepentingan dalam melaksanakan dan menilai kompetensi pekerjaan pembinaan berdasarkan Construction Occupational Competency Standard (COCS).",
@@ -290,22 +314,11 @@ function getDefaultCSPSectionContent(
   }
 
   if (sectionNo === "abbreviation") {
-    return [
-      "CIDB - Construction Industry Development Board",
-      "COCS - Construction Occupational Competency Standard",
-      "COS - Construction Occupational Structure",
-      "CCPC - Construction Competency Profile Chart",
-      "CCP - Construction Competency Profile",
-      "CSP - Construction Standard Practice",
-    ].join("\n");
+    return stringifyCommitteeRows(defaultAbbreviations);
   }
 
   if (sectionNo === "glossary") {
-    return [
-      "Competency - Keupayaan untuk melaksanakan kerja mengikut standard yang ditetapkan.",
-      "Occupational Structure - Struktur pekerjaan yang menunjukkan laluan kerjaya dan tahap kompetensi.",
-      "Standard Practice - Amalan standard yang menjadi rujukan pelaksanaan kerja.",
-    ].join("\n");
+    return stringifyCommitteeRows(defaultGlossary);
   }
 
   if (sectionNo === "figures") {
@@ -541,6 +554,35 @@ function CSPDocumentMode({
         standardLevel,
         careerPath
       );
+
+    if (sectionNo === "abbreviation" || sectionNo === "glossary") {
+      const rows = parseCommitteeRows(content, sectionNo === "abbreviation" ? 7 : 3);
+
+      return (
+        <section className="border border-slate-300 p-6">
+          <h2 className="text-center text-lg font-bold text-slate-900">
+            {detail.title}
+          </h2>
+          <table className="mt-5 w-full border border-black text-sm text-black">
+            <tbody>
+              {rows.map((row, index) => (
+                <tr key={`${sectionNo}-doc-row-${index}`}>
+                  <td className="w-16 border border-black px-3 py-2 text-center">
+                    {index + 1}
+                  </td>
+                  <td className="w-44 border border-black px-3 py-2 font-semibold text-red-600">
+                    {row.left}
+                  </td>
+                  <td className="border border-black px-3 py-2 text-red-600">
+                    {row.right}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      );
+    }
 
     return (
       <section className="border border-slate-300 p-6">
@@ -970,6 +1012,148 @@ function CSPCommitteeTableEditor({
   );
 }
 
+function CSPTermTableEditor({
+  sectionNo,
+  title,
+  description,
+  content,
+  onContentChange,
+  documentContext,
+}: {
+  sectionNo: "abbreviation" | "glossary";
+  title: string;
+  description: string;
+  content?: string;
+  onContentChange: (content: string) => void;
+  documentContext: string;
+}) {
+  const defaultContent = getDefaultCSPSectionContent(
+    sectionNo,
+    CSP_BUILDER_SECTION_DETAILS[sectionNo],
+    "",
+    "",
+    ""
+  );
+  const rows = parseCommitteeRows(
+    content || defaultContent,
+    sectionNo === "abbreviation" ? 7 : 3
+  );
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  function updateRow(index: number, key: keyof CommitteeRow, value: string) {
+    onContentChange(
+      stringifyCommitteeRows(
+        rows.map((row, rowIndex) =>
+          rowIndex === index ? { ...row, [key]: value } : row
+        )
+      )
+    );
+  }
+
+  function addRow() {
+    onContentChange(stringifyCommitteeRows([...rows, { left: "", right: "" }]));
+  }
+
+  function deleteRow(index: number) {
+    onContentChange(stringifyCommitteeRows(rows.filter((_, i) => i !== index)));
+  }
+
+  async function handleGenerate() {
+    try {
+      setIsGenerating(true);
+
+      const res = await fetch("/api/csp/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          sectionTitle: title,
+          sectionDescription: description,
+          generationType: sectionNo,
+          documentContext,
+        }),
+      });
+
+      if (!res.ok) throw new Error("Gagal menjana jadual.");
+
+      const data = (await res.json()) as { rows?: CommitteeRow[] };
+
+      if (Array.isArray(data.rows) && data.rows.length > 0) {
+        onContentChange(stringifyCommitteeRows(data.rows));
+      }
+    } catch (error) {
+      console.error("Gagal jana jadual CSP:", error);
+      alert("Gagal menjana jadual CSP.");
+    } finally {
+      setIsGenerating(false);
+    }
+  }
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-6 py-5">
+        <div>
+          <h2 className="text-xl font-bold text-blue-700">{title}</h2>
+          <p className="mt-1 text-sm text-slate-500">{description}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={addRow}
+            className="inline-flex items-center gap-2 rounded-xl border border-blue-200 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-50"
+          >
+            <Plus size={16} />
+            Tambah Baris
+          </button>
+          <button
+            type="button"
+            onClick={handleGenerate}
+            disabled={isGenerating}
+            className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+          >
+            {isGenerating ? "Menjana..." : "Jana AI"}
+          </button>
+        </div>
+      </div>
+
+      <div className="space-y-3 p-6">
+        {rows.map((row, index) => (
+          <div
+            key={`${sectionNo}-editor-${index}`}
+            className="grid grid-cols-[0.7fr_1.4fr_auto] gap-3"
+          >
+            <input
+              value={row.left}
+              onChange={(event) => updateRow(index, "left", event.target.value)}
+              className="rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
+              placeholder={sectionNo === "abbreviation" ? "Singkatan" : "Istilah"}
+            />
+            <input
+              value={row.right}
+              onChange={(event) =>
+                updateRow(index, "right", event.target.value)
+              }
+              className="rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
+              placeholder={
+                sectionNo === "abbreviation" ? "Maksud" : "Definisi"
+              }
+            />
+            <button
+              type="button"
+              onClick={() => deleteRow(index)}
+              className="rounded-xl border border-red-200 p-3 text-red-600 hover:bg-red-50"
+              title="Padam baris"
+            >
+              <Trash2 size={16} />
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function CSPDevelopmentCommitteeEditor({
   content,
   onContentChange,
@@ -1324,6 +1508,39 @@ function CSPPageContent() {
       "-",
     [projectInfo.area, projectInfo.subarea, projectInfo.subsector, targetInfo]
   );
+  const cspDocumentContext = useMemo(
+    () =>
+      [
+        projectInfo.code,
+        projectInfo.sector,
+        projectInfo.subsector,
+        projectInfo.area,
+        standardTitle,
+        standardLevel,
+        careerPath,
+        ...Object.entries(cspSections)
+          .filter(([key]) => key !== "abbreviation" && key !== "glossary")
+          .map(([, value]) => value),
+        ...competencies.flatMap((competency) => [
+          competency.code,
+          competency.title,
+          ...competency.units.flatMap((unit) => [unit.code, unit.title]),
+        ]),
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    [
+      projectInfo.code,
+      projectInfo.sector,
+      projectInfo.subsector,
+      projectInfo.area,
+      standardTitle,
+      standardLevel,
+      careerPath,
+      cspSections,
+      competencies,
+    ]
+  );
   const ccpHref = projectId ? `/ccp?projectId=${projectId}` : "/ccp";
   const cccHref = projectId ? `/ccc?projectId=${projectId}` : "/ccc";
 
@@ -1632,7 +1849,22 @@ function CSPPageContent() {
             />
 
             <div className="space-y-6">
-              {activeBuilderSection === "6" ? (
+              {activeBuilderSection === "abbreviation" ||
+              activeBuilderSection === "glossary" ? (
+                <CSPTermTableEditor
+                  sectionNo={activeBuilderSection}
+                  title={activeBuilderDetail.title}
+                  description={activeBuilderDetail.description}
+                  content={cspSections[activeBuilderSection]}
+                  documentContext={cspDocumentContext}
+                  onContentChange={(content) =>
+                    setCspSections((prev) => ({
+                      ...prev,
+                      [activeBuilderSection]: content,
+                    }))
+                  }
+                />
+              ) : activeBuilderSection === "6" ? (
                 <CSPCommitteeTableEditor
                   title="6. Standard Technical Evaluation Committee"
                   description="Lengkapkan nama dan organisasi/peranan jawatankuasa penilaian teknikal."
