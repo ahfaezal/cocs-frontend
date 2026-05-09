@@ -262,6 +262,70 @@ function formatLevel(level: string) {
   return level && level !== "-" ? `Tahap ${level}` : "-";
 }
 
+function getDefaultCSPSectionContent(
+  sectionNo: string,
+  detail: CSPBuilderSectionDetail,
+  standardTitle: string,
+  standardLevel: string,
+  careerPath: string
+) {
+  if (sectionNo === "prakata") {
+    return [
+      "Dokumen Standard Practice ini dibangunkan sebagai panduan kepada pihak berkepentingan dalam melaksanakan dan menilai kompetensi pekerjaan pembinaan berdasarkan Construction Occupational Competency Standard (COCS).",
+      "Dokumen ini hendaklah digunakan bersama maklumat COS, CCPC dan CCP yang telah dibangunkan bagi memastikan kandungan standard adalah selaras dengan keperluan industri.",
+    ].join("\n\n");
+  }
+
+  if (sectionNo === "abbreviation") {
+    return [
+      "CIDB - Construction Industry Development Board",
+      "COCS - Construction Occupational Competency Standard",
+      "COS - Construction Occupational Structure",
+      "CCPC - Construction Competency Profile Chart",
+      "CCP - Construction Competency Profile",
+      "CSP - Construction Standard Practice",
+    ].join("\n");
+  }
+
+  if (sectionNo === "glossary") {
+    return [
+      "Competency - Keupayaan untuk melaksanakan kerja mengikut standard yang ditetapkan.",
+      "Occupational Structure - Struktur pekerjaan yang menunjukkan laluan kerjaya dan tahap kompetensi.",
+      "Standard Practice - Amalan standard yang menjadi rujukan pelaksanaan kerja.",
+    ].join("\n");
+  }
+
+  if (sectionNo === "figures") {
+    return "Figure 1: Construction Occupational Structure (COS)";
+  }
+
+  if (sectionNo === "acknowledgement") {
+    return [
+      "CIDB Malaysia merakamkan penghargaan kepada semua ahli jawatankuasa, fasilitator, panel industri dan pihak berkepentingan yang terlibat dalam pembangunan dokumen ini.",
+      "Sumbangan kepakaran, masa dan maklum balas yang diberikan telah membantu memastikan dokumen ini memenuhi keperluan industri pembinaan.",
+    ].join("\n\n");
+  }
+
+  if (sectionNo === "3") {
+    return [
+      "Level 1: Competent in performing a limited range of routine and predictable work activities under supervision.",
+      "Level 2: Competent in performing a range of varied work activities in a variety of contexts, with some individual responsibility.",
+      "Level 3: Competent in performing a broad range of work activities, with responsibility for own work and some responsibility for others.",
+      "Level 4: Competent in performing complex technical or supervisory work activities with responsibility for work outcomes.",
+      "Level 5: Competent in managing work processes, resources and teams within a defined operational area.",
+      "Level 6: Competent in providing strategic, managerial and expert-level direction for occupational practice.",
+    ].join("\n");
+  }
+
+  if (detail.kind === "manual") {
+    return `${detail.title} bagi ${standardTitle} ${formatLevel(
+      standardLevel
+    )} dalam ${careerPath}.`;
+  }
+
+  return detail.description;
+}
+
 function slugify(value: string) {
   return value
     .toLowerCase()
@@ -387,9 +451,18 @@ function CSPDocumentMode({
 
   const renderSavedSection = (sectionNo: string) => {
     const detail = CSP_BUILDER_SECTION_DETAILS[sectionNo];
-    const content = cspSections[sectionNo]?.trim();
 
-    if (!detail || !content) return null;
+    if (!detail) return null;
+
+    const content =
+      cspSections[sectionNo]?.trim() ||
+      getDefaultCSPSectionContent(
+        sectionNo,
+        detail,
+        standardTitle,
+        standardLevel,
+        careerPath
+      );
 
     return (
       <section className="border border-slate-300 p-6">
@@ -628,43 +701,47 @@ function CSPDocumentMode({
           5. Organisation Reference for Sources of Additional Information
         </h2>
 
-        <p className="mt-3 text-sm leading-6 text-slate-700">
-          The following organisations can be referred as sources of additional
-          information which can assist in defining the document&apos;s contents.
-        </p>
+        {cspSections["5"]?.trim() ? (
+          <div className="mt-4 whitespace-pre-line text-sm leading-7 text-slate-900">
+            {cspSections["5"].trim()}
+          </div>
+        ) : (
+          <>
+            <p className="mt-3 text-sm leading-6 text-slate-700">
+              The following organisations can be referred as sources of
+              additional information which can assist in defining the
+              document&apos;s contents.
+            </p>
 
-        <div className="mt-4 space-y-4 text-sm leading-6 text-slate-900">
-          {ORGANISATION_REFERENCES.map((organisation, organisationIndex) => (
-            <div
-              key={`csp-organisation-${organisation.name}`}
-              className="flex gap-3"
-            >
-              <span className="w-6 shrink-0">
-                {alphabetMarker(organisationIndex)}
-              </span>
-              <div>
-                <div className="font-semibold">{organisation.name}</div>
-                {organisation.lines.map((line, lineIndex) => (
-                  <div key={`csp-organisation-${organisation.name}-${lineIndex}`}>
-                    {line}
+            <div className="mt-4 space-y-4 text-sm leading-6 text-slate-900">
+              {ORGANISATION_REFERENCES.map(
+                (organisation, organisationIndex) => (
+                  <div
+                    key={`csp-organisation-${organisation.name}`}
+                    className="flex gap-3"
+                  >
+                    <span className="w-6 shrink-0">
+                      {alphabetMarker(organisationIndex)}
+                    </span>
+                    <div>
+                      <div className="font-semibold">{organisation.name}</div>
+                      {organisation.lines.map((line, lineIndex) => (
+                        <div
+                          key={`csp-organisation-${organisation.name}-${lineIndex}`}
+                        >
+                          {line}
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                ))}
-              </div>
+                )
+              )}
             </div>
-          ))}
-        </div>
+          </>
+        )}
       </section>
 
-      <section className="border border-slate-300 p-6">
-        <h2 className="text-lg font-bold text-slate-900">
-          6. Standard Technical Evaluation Committee
-        </h2>
-
-        <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700">
-          Maklumat jawatankuasa teknikal akan dikemaskini selepas proses
-          penilaian teknikal standard disahkan.
-        </div>
-      </section>
+      {renderSavedSection("6")}
 
       <section className="border border-slate-300 p-6">
         <h2 className="text-lg font-bold text-slate-900">
@@ -745,12 +822,17 @@ function CSPBuilderSectionPanel({
   sectionContent?: string;
   onContentChange: (content: string) => void;
 }) {
-  const defaultDraft =
-    section.kind === "manual"
-      ? `${section.title} bagi ${standardTitle} ${formatLevel(
-          standardLevel
-        )} dalam ${careerPath}.`
-      : "";
+  const sectionNo =
+    Object.entries(CSP_BUILDER_SECTION_DETAILS).find(
+      ([, detail]) => detail === section
+    )?.[0] || "1";
+  const defaultDraft = getDefaultCSPSectionContent(
+    sectionNo,
+    section,
+    standardTitle,
+    standardLevel,
+    careerPath
+  );
   const content = sectionContent ?? defaultDraft;
   const [isGenerating, setIsGenerating] = useState(false);
 
@@ -996,6 +1078,21 @@ function CSPPageContent() {
       setSaveMessage("");
 
       const token = getAuthToken();
+      const nextSections = Object.fromEntries(
+        Object.entries(CSP_BUILDER_SECTION_DETAILS).map(
+          ([sectionNo, detail]) => [
+            sectionNo,
+            cspSections[sectionNo]?.trim() ||
+              getDefaultCSPSectionContent(
+                sectionNo,
+                detail,
+                standardTitle,
+                standardLevel,
+                careerPath
+              ),
+          ]
+        )
+      );
 
       const res = await fetch(`${API_URL}/csp/content/${projectId}`, {
         method: "POST",
@@ -1004,7 +1101,7 @@ function CSPPageContent() {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
-          sections: cspSections,
+          sections: nextSections,
         }),
       });
 
@@ -1012,6 +1109,7 @@ function CSPPageContent() {
         throw new Error("Gagal menyimpan kandungan CSP.");
       }
 
+      setCspSections(nextSections);
       setSaveMessage("Kandungan CSP telah disimpan.");
     } catch (error) {
       console.error("Gagal simpan kandungan CSP:", error);
