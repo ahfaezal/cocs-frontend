@@ -416,52 +416,6 @@ function CSPDocumentMode({
         </div>
       </section>
 
-      <section className="border border-slate-300 p-6">
-        <h2 className="text-lg font-bold text-slate-900">Maklumat Dokumen</h2>
-        <table className="mt-4 w-full border border-black text-sm text-black">
-          <tbody>
-            <tr>
-              <th className="w-48 border border-black bg-slate-200 px-3 py-2 text-left">
-                Section
-              </th>
-              <td className="border border-black px-3 py-2">
-                {projectInfo.sector}
-              </td>
-            </tr>
-            <tr>
-              <th className="border border-black bg-slate-200 px-3 py-2 text-left">
-                Group
-              </th>
-              <td className="border border-black px-3 py-2">
-                {projectInfo.subsector}
-              </td>
-            </tr>
-            <tr>
-              <th className="border border-black bg-slate-200 px-3 py-2 text-left">
-                Area
-              </th>
-              <td className="border border-black px-3 py-2">
-                {projectInfo.area || "-"}
-              </td>
-            </tr>
-            <tr>
-              <th className="border border-black bg-slate-200 px-3 py-2 text-left">
-                COCS Title
-              </th>
-              <td className="border border-black px-3 py-2">{standardTitle}</td>
-            </tr>
-            <tr>
-              <th className="border border-black bg-slate-200 px-3 py-2 text-left">
-                COCS Level
-              </th>
-              <td className="border border-black px-3 py-2">
-                {formatLevel(standardLevel)}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </section>
-
       {[
         "prakata",
         "abbreviation",
@@ -1284,9 +1238,14 @@ function CSPPageContent() {
                 </Link>
 
                 <div className="flex flex-wrap gap-3">
-                  <button className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 font-semibold text-slate-700 transition hover:bg-slate-50">
+                  <button
+                    type="button"
+                    onClick={handleSaveCSPContent}
+                    disabled={isSavingCSP}
+                    className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
                     <Save size={16} />
-                    Simpan Draf
+                    {isSavingCSP ? "Menyimpan..." : "Simpan Draf"}
                   </button>
 
                   <Link
