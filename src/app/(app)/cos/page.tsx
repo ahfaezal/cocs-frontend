@@ -32,10 +32,6 @@ type COSMatrix = {
   levels: Record<number, string[]>;
   selectedDevelopmentLevels: number[];
   selectedDevelopmentTargets: COSDevelopmentTarget[];
-  selectedTarget: {
-    level: number;
-    columnIndex: number;
-  } | null;
 };
 
 function COSDocumentMode({
@@ -151,21 +147,6 @@ function createEmptyMatrix(): COSMatrix {
     },
     selectedDevelopmentLevels: [],
     selectedDevelopmentTargets: [],
-    selectedTarget: null,
-  };
-}
-
-function getSelectedTarget(matrix: COSMatrix, projectId: string) {
-  if (!matrix.selectedTarget) return null;
-
-  const { level, columnIndex } = matrix.selectedTarget;
-
-  return {
-    projectId,
-    occupationTitle: matrix.levels[level]?.[columnIndex] || "",
-    subarea: matrix.subareas[columnIndex] || "",
-    level,
-    columnIndex,
   };
 }
 
@@ -332,7 +313,6 @@ function COSPageContent() {
                 backendData.matrix.selectedDevelopmentLevels ?? [],
               selectedDevelopmentTargets:
                 backendData.matrix.selectedDevelopmentTargets ?? [],
-              selectedTarget: backendData.matrix.selectedTarget ?? null,
             });
             setHasSavedCOS(true);
             setHasUnsavedChanges(false);
@@ -389,7 +369,6 @@ function COSPageContent() {
         levels: nextLevels,
         selectedDevelopmentLevels: prev.selectedDevelopmentLevels,
         selectedDevelopmentTargets: prev.selectedDevelopmentTargets ?? [],
-        selectedTarget: prev.selectedTarget,
       };
     });
   }
@@ -423,16 +402,6 @@ function COSPageContent() {
         {}
       );
 
-      const selectedTarget =
-        prev.selectedTarget && prev.selectedTarget.columnIndex === index
-          ? null
-          : prev.selectedTarget && prev.selectedTarget.columnIndex > index
-            ? {
-                ...prev.selectedTarget,
-                columnIndex: prev.selectedTarget.columnIndex - 1,
-              }
-            : prev.selectedTarget;
-
       const selectedDevelopmentTargets = (prev.selectedDevelopmentTargets ?? [])
         .filter((target) => target.columnIndex !== index)
         .map((target) =>
@@ -448,7 +417,6 @@ function COSPageContent() {
           new Set(selectedDevelopmentTargets.map((target) => target.level))
         ).sort((a, b) => a - b),
         selectedDevelopmentTargets,
-        selectedTarget,
       };
     });
   }
@@ -479,18 +447,6 @@ function COSPageContent() {
         },
       };
     });
-  }
-
-  function selectTargetOccupation(level: number, columnIndex: number) {
-    setMessage("");
-    setHasUnsavedChanges(true);
-    setMatrix((prev) => ({
-      ...prev,
-      selectedTarget: {
-        level,
-        columnIndex,
-      },
-    }));
   }
 
   function toggleDevelopmentTarget(level: number, columnIndex: number) {
@@ -528,15 +484,6 @@ function COSPageContent() {
     });
   }
 
-  const selectedTargetTitle = matrix.selectedTarget
-    ? matrix.levels[matrix.selectedTarget.level]?.[
-        matrix.selectedTarget.columnIndex
-      ] || ""
-    : "";
-
-  const selectedTargetSubarea = matrix.selectedTarget
-    ? matrix.subareas[matrix.selectedTarget.columnIndex] || ""
-    : "";
   const selectedDevelopmentTargets = getDevelopmentTargets(matrix);
   const selectedDevelopmentLevels = getSelectedDevelopmentLevels(matrix);
 
@@ -546,7 +493,6 @@ function COSPageContent() {
       return false;
     }
 
-    const target = getSelectedTarget(matrix, projectId);
     const nextMatrix = normalizeMatrixForSave(matrix);
 
     if (nextMatrix.selectedDevelopmentTargets.length === 0) {
@@ -564,7 +510,7 @@ function COSPageContent() {
       await saveCOSToBackend(
         projectId,
         nextMatrix,
-        target?.occupationTitle?.trim() ? target : null
+        nextMatrix.selectedDevelopmentTargets[0] || null
       );
 
       setMatrix(nextMatrix);
@@ -722,7 +668,7 @@ function COSPageContent() {
         </div>
 
         <div>
-          <p className="text-sm text-slate-500">Tahap Sasaran Standard</p>
+          <p className="text-sm text-slate-500">Tahap Projek Awal</p>
           <p className="mt-1 text-lg font-bold text-emerald-700">
             Level {projectInfo.level}
           </p>
@@ -734,33 +680,6 @@ function COSPageContent() {
             {new Date().toLocaleDateString("ms-MY")}
           </p>
         </div>
-      </div>
-
-      <div className="rounded-2xl border border-blue-200 bg-blue-50 px-6 py-4 shadow-sm">
-        <div className="text-sm font-semibold text-blue-700">Tajuk Fokus</div>
-
-        {selectedTargetTitle ? (
-          <>
-            <div className="mt-1 text-2xl font-bold text-slate-900">
-              {selectedTargetTitle}
-            </div>
-
-            <div className="mt-2 text-sm text-slate-600">
-              Subarea:{" "}
-              <span className="font-semibold">{selectedTargetSubarea}</span>
-              {" | "}
-              Tahap:{" "}
-              <span className="font-semibold">
-                Level {matrix.selectedTarget?.level}
-              </span>
-            </div>
-          </>
-        ) : (
-          <div className="mt-1 text-sm text-slate-600">
-            Pilih jawatan pada tahap sasaran jika tahap telah ditetapkan. Jika
-            belum, COS boleh disimpan dahulu dan tajuk fokus dipilih kemudian.
-          </div>
-        )}
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -801,7 +720,7 @@ function COSPageContent() {
               Lengkapkan struktur pekerjaan berdasarkan perbincangan bersama ahli panel.
             </p>
             <p className="mt-1 text-xs font-medium text-slate-500">
-              Nama jawatan yang dipilih sebagai Tajuk Fokus akan digunakan sebagai tajuk utama dokumen.
+              Tick nama jawatan yang hendak dibangunkan untuk proses CCPC.
             </p>
           </div>
 
@@ -891,13 +810,10 @@ function COSPageContent() {
                 ))}
               </tr>
 
-              {LEVELS.map((level) => {
-                const target = String(level) === String(projectInfo.level);
-
-                return (
+              {LEVELS.map((level) => (
                   <tr
                     key={level}
-                    className={target ? "bg-emerald-50" : "bg-white"}
+                    className="bg-white"
                   >
                     <th className="border border-slate-300 px-4 py-3 text-left font-bold text-slate-900">
                       Level {level}
@@ -955,38 +871,13 @@ function COSPageContent() {
                           Pilih untuk CCPC
                         </label>
 
-                        {target ? (
-                          <>
-                            <label className="mt-2 flex items-center justify-center gap-2 text-xs font-bold text-emerald-700">
-                              <input
-                                type="radio"
-                                name="cos-target-occupation"
-                                checked={
-                                  matrix.selectedTarget?.level === level &&
-                                  matrix.selectedTarget?.columnIndex ===
-                                    columnIndex
-                                }
-                                onChange={() =>
-                                  selectTargetOccupation(level, columnIndex)
-                                }
-                                disabled={!canEditCOS}
-                              />
-                              Pilih Tajuk Fokus
-                            </label>
-
-                            <div className="mt-1 text-center text-xs font-semibold text-emerald-600">
-                              TAHAP SASARAN
-                            </div>
-                          </>
-                        ) : null}
                             </>
                           );
                         })()}
                       </td>
                     ))}
                   </tr>
-                );
-              })}
+              ))}
             </tbody>
           </table>
         </div>
