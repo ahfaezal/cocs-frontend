@@ -134,10 +134,10 @@ export function CCPCDocumentMode({
 
   return (
     <div className="space-y-6">
-      {ccpcGroups.map((group, groupIndex) => {
-        const documentTitle = group.title || cocsTitle;
-        const documentLevel = group.level || cocsLevel;
-        const documentArea = group.subarea || area;
+      {ccpcGroups.map((ccpcGroup, groupIndex) => {
+        const documentTitle = ccpcGroup.title || cocsTitle;
+        const documentLevel = ccpcGroup.level || cocsLevel;
+        const documentArea = ccpcGroup.subarea || area;
 
         return (
           <div
@@ -211,7 +211,7 @@ export function CCPCDocumentMode({
         </div>
 
         <div className="space-y-5">
-          {group.clusters.map((cluster, clusterIndex) => {
+          {ccpcGroup.clusters.map((cluster, clusterIndex) => {
             const clusterName = getClusterName(cluster, clusterIndex);
             const clusterCode = getClusterCode(clusterIndex);
             const items = getItems(cluster);
