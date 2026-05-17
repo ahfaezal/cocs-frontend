@@ -833,45 +833,32 @@ function COSPageContent() {
                             );
 
                           return (
-                            <>
-                        <input
-                          value={value}
-                          onChange={(event) =>
-                            updateLevelValue(
-                              level,
-                              columnIndex,
-                              event.target.value
-                            )
-                          }
-                          disabled={!canEditCOS}
-                          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-center text-slate-900 outline-none focus:border-blue-500 disabled:bg-slate-50"
-                          placeholder="Masukkan jawatan"
-                        />
+                            <div className="flex items-center gap-2">
+                              <input
+                                value={value}
+                                onChange={(event) =>
+                                  updateLevelValue(
+                                    level,
+                                    columnIndex,
+                                    event.target.value
+                                  )
+                                }
+                                disabled={!canEditCOS}
+                                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-center text-slate-900 outline-none focus:border-blue-500 disabled:bg-slate-50"
+                                placeholder="Masukkan jawatan"
+                              />
 
-                        <label
-                          className={`mt-2 flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold transition ${
-                            selectedForCCPC
-                              ? "border-blue-200 bg-blue-50 text-blue-700"
-                              : "border-slate-200 bg-white text-slate-500"
-                          } ${
-                            !canEditCOS || !value.trim()
-                              ? "cursor-not-allowed opacity-60"
-                              : "cursor-pointer hover:border-blue-200 hover:bg-blue-50"
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedForCCPC}
-                            onChange={() =>
-                              toggleDevelopmentTarget(level, columnIndex)
-                            }
-                            disabled={!canEditCOS || !value.trim()}
-                            className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                          />
-                          Pilih untuk CCPC
-                        </label>
-
-                            </>
+                              <input
+                                type="checkbox"
+                                aria-label={`Pilih ${value || `Level ${level}`} untuk CCPC`}
+                                checked={selectedForCCPC}
+                                onChange={() =>
+                                  toggleDevelopmentTarget(level, columnIndex)
+                                }
+                                disabled={!canEditCOS || !value.trim()}
+                                className="h-4 w-4 shrink-0 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+                              />
+                            </div>
                           );
                         })()}
                       </td>
