@@ -9,6 +9,8 @@ export default function PanelInputPage() {
   const session = params.session as string;
 
   const [panelName, setPanelName] = useState("");
+  const [panelPosition, setPanelPosition] = useState("");
+  const [panelOrganization, setPanelOrganization] = useState("");
   const [task, setTask] = useState("");
   const [loading, setLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
@@ -30,6 +32,8 @@ export default function PanelInputPage() {
         body: JSON.stringify({
           session_id: session,
           panel_name: panelName.trim() || "Panel",
+          panel_position: panelPosition.trim(),
+          panel_organization: panelOrganization.trim(),
           task_text: task.trim(),
         }),
       });
@@ -58,10 +62,6 @@ export default function PanelInputPage() {
             Digital DACUM Panel Input
           </p>
 
-          <h1 className="text-xl font-bold text-slate-900">
-            Bricklaying (Wet Trade) Level 3
-          </h1>
-
           <p className="mt-1 text-xs text-slate-500">
             Session ID: {session}
           </p>
@@ -75,7 +75,29 @@ export default function PanelInputPage() {
           <input
             value={panelName}
             onChange={(e) => setPanelName(e.target.value)}
-            placeholder="Contoh: Panel 1"
+            placeholder="Prof. Mayda Ts. Dr. Ahmad Albab"
+            className="mb-4 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-500"
+          />
+
+          <label className="mb-2 block text-sm font-semibold text-slate-700">
+            Jawatan
+          </label>
+
+          <input
+            value={panelPosition}
+            onChange={(e) => setPanelPosition(e.target.value)}
+            placeholder="Supervisor/Technician/Welder"
+            className="mb-4 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-500"
+          />
+
+          <label className="mb-2 block text-sm font-semibold text-slate-700">
+            Organisasi
+          </label>
+
+          <input
+            value={panelOrganization}
+            onChange={(e) => setPanelOrganization(e.target.value)}
+            placeholder="Pembinaan Sdn Bhd/Universiti Malaysia"
             className="mb-4 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-500"
           />
 
@@ -87,9 +109,13 @@ export default function PanelInputPage() {
             value={task}
             onChange={(e) => setTask(e.target.value)}
             rows={5}
-            placeholder="Contoh: Menyusun bata mengikut garisan tapak..."
+            placeholder="Contoh: Laksana Pembersihan Kawasan"
             className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-500"
           />
+
+          <p className="mt-2 text-xs font-medium text-slate-500">
+            Setiap ayat perlu dimulakan dengan Kata Kerja.
+          </p>
 
           {successMessage && (
             <div className="mt-3 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
