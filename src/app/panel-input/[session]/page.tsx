@@ -88,7 +88,7 @@ export default function PanelInputPage() {
       setSubmittedCount(nextCount);
       setTask("");
       setSuccessMessage(
-        `Jumlah kad dihantar: ${nextCount}. Kad DACUM berjaya dihantar ke Live Board.`
+        `${nextCount} Kad DACUM berjaya dihantar ke Live Board.`
       );
     } catch (error) {
       console.error(error);
