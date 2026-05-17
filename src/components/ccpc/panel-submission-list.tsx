@@ -22,6 +22,7 @@ type PanelSummary = {
 type PanelSubmissionListProps = {
   sessionId: string;
   sessionActive?: boolean;
+  refreshActive?: boolean;
 };
 
 const RANK_STYLES = [
@@ -51,6 +52,7 @@ const RANK_STYLES = [
 export function PanelSubmissionList({
   sessionId,
   sessionActive = false,
+  refreshActive = false,
 }: PanelSubmissionListProps) {
   const [items, setItems] = useState<PanelSummary[]>([]);
   const [loading, setLoading] = useState(false);
@@ -124,13 +126,13 @@ export function PanelSubmissionList({
 
     loadData();
 
-    const timer = setInterval(loadData, 3000);
+    const timer = refreshActive ? setInterval(loadData, 3000) : null;
 
     return () => {
       cancelled = true;
-      clearInterval(timer);
+      if (timer) clearInterval(timer);
     };
-  }, [sessionActive, sessionId]);
+  }, [refreshActive, sessionActive, sessionId]);
 
   if (!sessionActive || (!loading && !errorMessage && items.length === 0)) {
     return null;
@@ -151,7 +153,7 @@ export function PanelSubmissionList({
           </div>
 
           <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
-            Live Refresh
+            {refreshActive ? "Live Refresh" : "Sesi Ditutup"}
           </span>
         </div>
       </div>

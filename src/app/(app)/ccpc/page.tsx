@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { ArrowLeft, ChevronRight, Info } from "lucide-react";
+import { ArrowLeft, ChevronRight, Info, Sparkles } from "lucide-react";
 
 import { CCPCHeader } from "@/components/ccpc/ccpc-header";
 import { CCPCStepProgress } from "@/components/ccpc/ccpc-step-progress";
@@ -53,6 +53,25 @@ type CCPCSummaryCluster = AIClusterResult["clusters"][number] & {
     level?: string | number;
     subarea?: string;
   };
+};
+
+type CCPCTargetGroup = {
+  key: string;
+  label: string;
+  target: {
+    occupationTitle?: string;
+    level?: string | number;
+    subarea?: string;
+  };
+  clusters: CCPCSummaryCluster[];
+};
+
+type CCPCPackage = {
+  packageId?: string;
+  packageName: string;
+  includedTargets: Array<Record<string, unknown>>;
+  consolidatedClusters: CCPCSummaryCluster[];
+  mode?: string;
 };
 
 function slugify(value: string) {
@@ -194,6 +213,32 @@ function CCPCSummaryMode({
   );
 }
 
+function groupClustersForPackaging(clusters: AIClusterResult["clusters"]) {
+  const summaryClusters = clusters as CCPCSummaryCluster[];
+  const groups = new Map<string, CCPCTargetGroup>();
+
+  summaryClusters.forEach((cluster) => {
+    const target = cluster.target || {};
+    const key = `${target.level || "-"}-${target.occupationTitle || "CCPC"}`;
+    const label = target.occupationTitle
+      ? `Level ${target.level || "-"} - ${target.occupationTitle}`
+      : "CCPC";
+
+    if (!groups.has(key)) {
+      groups.set(key, {
+        key,
+        label,
+        target,
+        clusters: [],
+      });
+    }
+
+    groups.get(key)?.clusters.push(cluster);
+  });
+
+  return Array.from(groups.values());
+}
+
 function CCPCPageContent() {
   const searchParams = useSearchParams();
   const projectId = searchParams.get("projectId") || "";
@@ -211,6 +256,10 @@ function CCPCPageContent() {
     null
   );
   const [isRunningClustering, setIsRunningClustering] = useState(false);
+  const [isConsolidating, setIsConsolidating] = useState(false);
+  const [selectedPackageKeys, setSelectedPackageKeys] = useState<string[]>([]);
+  const [packageName, setPackageName] = useState("");
+  const [ccpcPackages, setCCPCPackages] = useState<CCPCPackage[]>([]);
   const [sessionStatus, setSessionStatus] = useState<SessionStatus>("draft");
   const [targetInfo, setTargetInfo] = useState<COSTargetInfo | null>(null);
   const [cosMatrixInfo, setCOSMatrixInfo] = useState<COSMatrixInfo | null>(null);
@@ -226,6 +275,7 @@ function CCPCPageContent() {
   });
 
   const clusters = aiClusterResult?.clusters ?? [];
+  const targetGroups = useMemo(() => groupClustersForPackaging(clusters), [clusters]);
 
   useEffect(() => {
     if (!projectId) return;
@@ -330,6 +380,27 @@ function CCPCPageContent() {
     }, 0);
 
     return () => window.clearTimeout(timer);
+  }, [sessionName]);
+
+  useEffect(() => {
+    if (!sessionName) return;
+
+    async function loadPackages() {
+      try {
+        const res = await fetch(`${API_URL}/ccpc/packages/${sessionName}`, {
+          cache: "no-store",
+        });
+
+        if (!res.ok) return;
+
+        const data = await res.json();
+        setCCPCPackages(Array.isArray(data) ? data : []);
+      } catch (error) {
+        console.error("Gagal load CCPC packages:", error);
+      }
+    }
+
+    loadPackages();
   }, [sessionName]);
 
   useEffect(() => {
@@ -476,6 +547,68 @@ function CCPCPageContent() {
     }
   }
 
+  function togglePackageTarget(key: string) {
+    setSelectedPackageKeys((prev) =>
+      prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key]
+    );
+  }
+
+  async function handleConsolidatePackage() {
+    if (!canManageContent || selectedPackageKeys.length < 2) {
+      alert("Pilih sekurang-kurangnya dua level/jawatan untuk digabungkan.");
+      return;
+    }
+
+    const selectedGroups = targetGroups.filter((group) =>
+      selectedPackageKeys.includes(group.key)
+    );
+    const finalPackageName =
+      packageName.trim() ||
+      selectedGroups.map((group) => group.label).join(" + ");
+
+    try {
+      setIsConsolidating(true);
+
+      const res = await fetch(
+        `${API_URL}/ccpc/packages/${sessionName}/consolidate`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            package_name: finalPackageName,
+            included_targets: selectedGroups.map((group) => group.target),
+            source_clusters: selectedGroups.flatMap((group) => group.clusters),
+          }),
+        }
+      );
+
+      if (!res.ok) {
+        throw new Error("AI gabungan gagal dijalankan.");
+      }
+
+      const data = await res.json();
+
+      if (data.success === false) {
+        throw new Error(data.message || "AI gabungan gagal dijalankan.");
+      }
+
+      setCCPCPackages((prev) => [...prev, data.package]);
+      setSelectedPackageKeys([]);
+      setPackageName("");
+    } catch (error) {
+      console.error("Gagal consolidate CCPC package:", error);
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Gagal menjalankan AI gabungan dokumen."
+      );
+    } finally {
+      setIsConsolidating(false);
+    }
+  }
+
   if (!projectId) {
     return (
       <div className="space-y-4">
@@ -613,6 +746,7 @@ function CCPCPageContent() {
                 standardTitle={standardTitle}
                 readOnly={!canManageContent}
                 sessionId={sessionName}
+                refreshActive={sessionStatus === "active"}
                 sessionStatus={sessionStatus}
                 onActivateSession={handleActivateSession}
                 onCloseSession={handleCloseSession}
@@ -628,7 +762,8 @@ function CCPCPageContent() {
 
             <PanelSubmissionList
               sessionId={sessionName}
-              sessionActive={sessionStatus === "active"}
+              refreshActive={sessionStatus === "active"}
+              sessionActive={sessionStatus !== "draft"}
             />
 
             {sessionStatus === "active" ? (
@@ -671,9 +806,89 @@ function CCPCPageContent() {
                 result={aiClusterResult}
                 isRunning={isRunningClustering}
                 sessionId={sessionName}
-                sessionActive={sessionStatus === "active"}
+                refreshActive={sessionStatus === "active"}
+                sessionActive={sessionStatus !== "draft"}
               />
             </div>
+
+            {targetGroups.length > 1 ? (
+              <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-200 px-5 py-4">
+                  <h3 className="text-lg font-bold text-blue-700">
+                    Tetapan Gabungan Dokumen
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Pilih dua atau lebih level/jawatan untuk AI susun semula
+                    menjadi satu pakej CCPC tanpa menghapuskan hasil asal.
+                  </p>
+                </div>
+
+                <div className="space-y-4 p-5">
+                  <input
+                    value={packageName}
+                    onChange={(event) => setPackageName(event.target.value)}
+                    placeholder="Contoh: Railway Track Installation Level 1-3"
+                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-500"
+                  />
+
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    {targetGroups.map((group) => (
+                      <label
+                        key={group.key}
+                        className={`flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 text-sm font-semibold transition ${
+                          selectedPackageKeys.includes(group.key)
+                            ? "border-blue-300 bg-blue-50 text-blue-800"
+                            : "border-slate-200 text-slate-700 hover:bg-slate-50"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedPackageKeys.includes(group.key)}
+                          onChange={() => togglePackageTarget(group.key)}
+                          className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        {group.label}
+                      </label>
+                    ))}
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-sm text-slate-500">
+                      {ccpcPackages.length > 0
+                        ? `${ccpcPackages.length} pakej gabungan telah dijana.`
+                        : "Belum ada pakej gabungan dijana."}
+                    </p>
+
+                    <button
+                      type="button"
+                      onClick={handleConsolidatePackage}
+                      disabled={isConsolidating || selectedPackageKeys.length < 2}
+                      className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                    >
+                      <Sparkles size={16} />
+                      {isConsolidating
+                        ? "Menyusun..."
+                        : "AI Susun Semula Gabungan"}
+                    </button>
+                  </div>
+
+                  {ccpcPackages.length > 0 ? (
+                    <div className="space-y-2">
+                      {ccpcPackages.map((item) => (
+                        <div
+                          key={item.packageId || item.packageName}
+                          className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"
+                        >
+                          <span className="font-bold">{item.packageName}</span>{" "}
+                          ({item.consolidatedClusters?.length || 0} Core
+                          Competency)
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
 
             <CCPCAIClusterList
               clusters={clusters}

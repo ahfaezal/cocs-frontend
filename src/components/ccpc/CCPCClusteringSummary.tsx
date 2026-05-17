@@ -20,12 +20,14 @@ interface CCPCClusteringSummaryProps {
   isRunning: boolean;
   sessionId: string;
   sessionActive?: boolean;
+  refreshActive?: boolean;
 }
 
 export function CCPCClusteringSummary({
   isRunning,
   sessionId,
   sessionActive = false,
+  refreshActive = false,
 }: CCPCClusteringSummaryProps) {
   const [cards, setCards] = useState<CCPCCard[]>([]);
   const [clusters, setClusters] = useState<CCPCCluster[]>([]);
@@ -83,13 +85,13 @@ export function CCPCClusteringSummary({
 
     loadSummary();
 
-    const timer = setInterval(loadSummary, 3000);
+    const timer = refreshActive ? setInterval(loadSummary, 3000) : null;
 
     return () => {
       cancelled = true;
-      clearInterval(timer);
+      if (timer) clearInterval(timer);
     };
-  }, [sessionActive, sessionId]);
+  }, [refreshActive, sessionActive, sessionId]);
 
   const totalCards = sessionActive ? cards.length : 0;
   const uniqueCards = sessionActive

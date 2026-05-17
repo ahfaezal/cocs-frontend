@@ -10,6 +10,7 @@ type DacumSessionCardProps = {
   standardTitle?: string;
   readOnly?: boolean;
   sessionId?: string;
+  refreshActive?: boolean;
   sessionStatus?: SessionStatus;
   onActivateSession?: () => void;
   onCloseSession?: () => void;
@@ -47,6 +48,7 @@ export function DacumSessionCard({
   standardTitle,
   readOnly = false,
   sessionId = "",
+  refreshActive = false,
   sessionStatus = "draft",
   onActivateSession,
   onCloseSession,
@@ -100,13 +102,13 @@ export function DacumSessionCard({
 
     loadCounts();
 
-    const timer = window.setInterval(loadCounts, 3000);
+    const timer = refreshActive ? window.setInterval(loadCounts, 3000) : null;
 
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      if (timer) window.clearInterval(timer);
     };
-  }, [sessionId]);
+  }, [refreshActive, sessionId]);
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
