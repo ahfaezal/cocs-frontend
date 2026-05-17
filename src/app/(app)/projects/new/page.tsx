@@ -8,6 +8,7 @@ import {
   FileText,
   ArrowRight,
   ArrowLeft,
+  Save,
 } from "lucide-react";
 
 import { ProjectFormStepper } from "@/components/projects/project-form-stepper";
@@ -38,6 +39,8 @@ function NewProjectPageContent() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [savedProjectId, setSavedProjectId] = useState(projectId);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(!isEditMode);
 
   const [form, setForm] = useState({
   kodProjek: "",
@@ -55,10 +58,12 @@ function NewProjectPageContent() {
   const selectedMSICGroups = getMSICGroupsBySection(form.sektor);
 
   function updateField(name: keyof typeof form, value: string) {
+    setHasUnsavedChanges(true);
     setForm((prev) => ({ ...prev, [name]: value }));
   }
 
   function updateSector(value: string) {
+    setHasUnsavedChanges(true);
     setForm((prev) => ({
       ...prev,
       sektor: value,
@@ -68,11 +73,19 @@ function NewProjectPageContent() {
   }
 
   function updateSubsector(value: string) {
+    setHasUnsavedChanges(true);
     setForm((prev) => ({
       ...prev,
       subsektor: value,
       msic: value,
     }));
+  }
+
+  function rememberActiveProject(id: string, title: string) {
+    if (typeof window === "undefined") return;
+
+    window.localStorage.setItem("cocs_active_project_id", id);
+    window.localStorage.setItem("cocs_active_project_title", title);
   }
 
   useEffect(() => {
@@ -109,6 +122,13 @@ function NewProjectPageContent() {
           ringkasan: data.summary || data.description || "",
           status: data.status || "draft",
         });
+
+        setSavedProjectId(projectId);
+        setHasUnsavedChanges(false);
+        rememberActiveProject(
+          projectId,
+          data.project_title || data.title || "Projek COCS"
+        );
       } catch (error) {
         console.error("Gagal load projek:", error);
         setErrorMessage(
@@ -124,7 +144,7 @@ function NewProjectPageContent() {
     loadProject();
   }, [isEditMode, projectId]);
 
-  async function handleSaveDraft(next = false) {
+  async function handleSaveDraft() {
     if (!canManageProject) {
       setErrorMessage(
         isEditMode
@@ -154,10 +174,13 @@ function NewProjectPageContent() {
       setMessage("");
       setErrorMessage("");
 
-      const tahapNumber = Number(String(form.tahap).replace(/\D/g, "")) || 1;
+      const parsedTahap = Number(String(form.tahap).replace(/\D/g, ""));
+      const tahapNumber = parsedTahap >= 1 && parsedTahap <= 6 ? parsedTahap : null;
       const tahunNumber = new Date().getFullYear();
+      const persistedProjectId = savedProjectId || projectId;
+      const shouldUpdateExisting = Boolean(persistedProjectId);
 
-      const projectCode = isEditMode
+      const projectCode = shouldUpdateExisting
         ? form.kodProjek
         : `COCS/${tahunNumber}/${Date.now()
         .toString()
@@ -202,9 +225,11 @@ function NewProjectPageContent() {
       const token = getAuthToken();
 
       const res = await fetch(
-        isEditMode ? `${API_URL}/projects/${projectId}` : `${API_URL}/projects/`,
+        shouldUpdateExisting
+          ? `${API_URL}/projects/${persistedProjectId}`
+          : `${API_URL}/projects/`,
         {
-        method: isEditMode ? "PATCH" : "POST",
+        method: shouldUpdateExisting ? "PATCH" : "POST",
         headers: {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -237,15 +262,22 @@ function NewProjectPageContent() {
       }
 
       const result = responseText ? JSON.parse(responseText) : null;
+      const resolvedProjectId = String(result?.id || persistedProjectId || "");
 
       setMessage(
-        isEditMode
+        shouldUpdateExisting
           ? "Projek berjaya dikemaskini."
           : "Projek berjaya disimpan sebagai draf."
       );
 
-      if (next) {
-        router.push("/projects");
+      if (resolvedProjectId) {
+        setSavedProjectId(resolvedProjectId);
+        setHasUnsavedChanges(false);
+        rememberActiveProject(resolvedProjectId, form.tajukProjek.trim());
+        setForm((prev) => ({
+          ...prev,
+          kodProjek: projectCode,
+        }));
       }
 
       return result;
@@ -260,6 +292,17 @@ function NewProjectPageContent() {
     } finally {
       setSaving(false);
     }
+  }
+
+  function handleNext() {
+    if (!savedProjectId || hasUnsavedChanges) {
+      setErrorMessage(
+        "Sila klik Save dan pastikan maklumat projek berjaya disimpan sebelum meneruskan ke COS."
+      );
+      return;
+    }
+
+    router.push(`/cos?projectId=${savedProjectId}`);
   }
 
   if (!canManageProject) {
@@ -342,8 +385,12 @@ function NewProjectPageContent() {
             <h2 className="text-lg font-bold tracking-wide text-blue-700">
               MAKLUMAT ASAS PROJEK
             </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Maklumat ini menjadi konteks awal untuk AI semasa proses COS, CCPC dan dokumen seterusnya.
+            </p>
           </div>
 
+          <div className="grid grid-cols-1 gap-5 px-6 py-5 xl:grid-cols-12">
       {isEditMode ? (
         <div className="xl:col-span-12">
           <label className="mb-2 block text-sm font-semibold text-slate-700">
@@ -400,20 +447,23 @@ function NewProjectPageContent() {
 
       <div className="xl:col-span-4">
         <label className="mb-2 block text-sm font-semibold text-slate-700">
-          Tahap Sasaran <span className="text-red-500">*</span>
+          Tahap Sasaran
         </label>
         <select
           value={form.tahap}
           onChange={(e) => updateField("tahap", e.target.value)}
           className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
         >
-          <option value="">Sila pilih tahap (1-6)</option>
+          <option value="">Belum ditetapkan - tentukan selepas COS/CCPC</option>
           {[1, 2, 3, 4, 5, 6].map((level) => (
             <option key={level} value={String(level)}>
               Tahap {level}
             </option>
           ))}
         </select>
+        <p className="mt-2 text-xs leading-5 text-slate-500">
+          Boleh dibiarkan kosong jika tahap belum diputuskan atau projek berpotensi melibatkan gabungan beberapa tahap.
+        </p>
       </div>
 
       <div className="xl:col-span-4">
@@ -500,20 +550,51 @@ function NewProjectPageContent() {
         />
       </div>
 
-          <div className="flex flex-wrap items-center justify-end border-t border-slate-200 px-8 py-5">
+      <div className="xl:col-span-12">
+        <label className="mb-2 block text-sm font-semibold text-slate-700">
+          Maklumat Ringkas Projek
+        </label>
+        <textarea
+          value={form.ringkasan}
+          onChange={(e) => updateField("ringkasan", e.target.value)}
+          rows={5}
+          className="w-full resize-y rounded-xl border border-slate-200 px-4 py-3 text-sm leading-6 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+          placeholder="Contoh: Terangkan skop pekerjaan, lokasi/industri, aktiviti utama, isu keselamatan, teknologi, standard rujukan, atau objektif pembangunan COCS. Maklumat ini akan digunakan sebagai konteks awal AI."
+        />
+        <p className="mt-2 text-xs leading-5 text-slate-500">
+          Ringkasan ini akan membantu AI memahami skop perbincangan sebelum menjana cadangan COS, CCPC, CCP dan CSP.
+        </p>
+      </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-8 py-5">
+            <div className="text-sm text-slate-500">
+              {savedProjectId && !hasUnsavedChanges
+                ? "Maklumat projek telah disimpan dan sedia untuk proses COS."
+                : "Klik Save dahulu untuk menyimpan maklumat projek."}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => handleSaveDraft()}
+                disabled={saving}
+                className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-white px-6 py-3 font-semibold text-blue-700 transition hover:bg-blue-50 disabled:opacity-60"
+              >
+                <Save size={16} />
+                {saving ? "Menyimpan..." : "Save"}
+              </button>
+
             <button
               type="button"
-              onClick={() => handleSaveDraft(true)}
-              disabled={saving}
-              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:opacity-60"
+              onClick={handleNext}
+              disabled={saving || !savedProjectId || hasUnsavedChanges}
+              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {saving
-                ? "Menyimpan..."
-                : isEditMode
-                  ? "Simpan Kemaskini"
-                  : "Seterusnya"}
+              Seterusnya
               <ArrowRight size={16} />
             </button>
+            </div>
           </div>
         </div>
       </div>

@@ -18,6 +18,12 @@ type CCPCCluster = {
   finalised?: boolean;
   items?: string[];
   cards?: CCPCClusterCard[];
+  target?: {
+    occupationTitle?: string;
+    level?: string | number;
+    subarea?: string;
+  };
+  targetIndex?: number;
 };
 
 type CCPCDocumentModeProps = {
@@ -69,6 +75,52 @@ function getItems(cluster: CCPCCluster) {
   return [];
 }
 
+function groupClustersByTarget(clusters: CCPCCluster[]) {
+  const finalClusters =
+    clusters.filter((cluster) => cluster.finalised).length > 0
+      ? clusters.filter((cluster) => cluster.finalised)
+      : clusters;
+
+  const groups = new Map<
+    string,
+    {
+      title: string;
+      level: string;
+      subarea: string;
+      clusters: CCPCCluster[];
+    }
+  >();
+
+  finalClusters.forEach((cluster) => {
+    const target = cluster.target || {};
+    const key = `${cluster.targetIndex ?? "default"}-${target.occupationTitle || ""}-${target.level || ""}`;
+
+    if (!groups.has(key)) {
+      groups.set(key, {
+        title: target.occupationTitle || "",
+        level: String(target.level || ""),
+        subarea: target.subarea || "",
+        clusters: [],
+      });
+    }
+
+    groups.get(key)?.clusters.push(cluster);
+  });
+
+  if (groups.size === 0) {
+    return [
+      {
+        title: "",
+        level: "",
+        subarea: "",
+        clusters: finalClusters,
+      },
+    ];
+  }
+
+  return Array.from(groups.values());
+}
+
 export function CCPCDocumentMode({
   clusters,
   section = "-",
@@ -78,14 +130,21 @@ export function CCPCDocumentMode({
   cocsLevel = "-",
   cocsCode = "",
 }: CCPCDocumentModeProps) {
-  const finalClusters =
-    clusters.filter((cluster) => cluster.finalised).length > 0
-      ? clusters.filter((cluster) => cluster.finalised)
-      : clusters;
+  const ccpcGroups = groupClustersByTarget(clusters);
 
   return (
-    <div className="w-full overflow-x-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="min-w-[980px] font-serif text-[14px] text-black">
+    <div className="space-y-6">
+      {ccpcGroups.map((group, groupIndex) => {
+        const documentTitle = group.title || cocsTitle;
+        const documentLevel = group.level || cocsLevel;
+        const documentArea = group.subarea || area;
+
+        return (
+          <div
+            key={`ccpc-document-${groupIndex}-${documentTitle}`}
+            className="w-full overflow-x-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
+          >
+            <div className="min-w-[980px] font-serif text-[14px] text-black">
         <h1 className="mb-4 text-[16px] font-bold">
           Construction Competency Profile Chart (CCPC)
         </h1>
@@ -113,7 +172,7 @@ export function CCPCDocumentMode({
                 AREA
               </td>
               <td className="border border-black px-3 py-2" colSpan={3}>
-                {area}
+                {documentArea}
               </td>
             </tr>
             <tr>
@@ -121,14 +180,16 @@ export function CCPCDocumentMode({
                 COCS TITLE
               </td>
               <td className="border border-black px-3 py-2" colSpan={3}>
-                {cocsTitle}
+                {documentTitle}
               </td>
             </tr>
             <tr>
               <td className="border border-black bg-[#d9d9d9] px-3 py-2">
                 COCS LEVEL
               </td>
-              <td className="border border-black px-3 py-2">{formatLevel(cocsLevel)}</td>
+              <td className="border border-black px-3 py-2">
+                {formatLevel(documentLevel)}
+              </td>
               <td className="w-[150px] border border-black bg-[#d9d9d9] px-3 py-2">
                 COCS CODE
               </td>
@@ -150,7 +211,7 @@ export function CCPCDocumentMode({
         </div>
 
         <div className="space-y-5">
-          {finalClusters.map((cluster, clusterIndex) => {
+          {group.clusters.map((cluster, clusterIndex) => {
             const clusterName = getClusterName(cluster, clusterIndex);
             const clusterCode = getClusterCode(clusterIndex);
             const items = getItems(cluster);
@@ -201,6 +262,9 @@ export function CCPCDocumentMode({
           })}
         </div>
       </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

@@ -11,7 +11,6 @@ import { DacumSessionCard } from "@/components/ccpc/dacum-session-card";
 import { PanelQRCodeCard } from "@/components/ccpc/panel-qr-card";
 import { PanelSubmissionList } from "@/components/ccpc/panel-submission-list";
 import { LiveBoardToolbar } from "@/components/ccpc/live-board-toolbar";
-import { DacumCardGrid } from "@/components/ccpc/dacum-card-grid";
 import { CCPCClusteringSummary } from "@/components/ccpc/CCPCClusteringSummary";
 import { CCPCAIClusterList } from "@/components/ccpc/CCPCAIClusterList";
 import { CCPCDocumentMode } from "@/components/ccpc/ccpc-document-mode";
@@ -31,12 +30,29 @@ type COSTargetInfo = {
   level?: number;
 };
 
+type COSDevelopmentTarget = {
+  level: number;
+  columnIndex: number;
+  occupationTitle?: string;
+  subarea?: string;
+};
+
+type COSMatrixInfo = {
+  selectedDevelopmentLevels?: number[];
+  selectedDevelopmentTargets?: COSDevelopmentTarget[];
+};
+
 type CCPCSummaryCluster = AIClusterResult["clusters"][number] & {
   id?: string | number;
   clusterName?: string;
   items?: string[];
   workStepsMap?: Record<string, string[]>;
   notes?: string;
+  target?: {
+    occupationTitle?: string;
+    level?: string | number;
+    subarea?: string;
+  };
 };
 
 function slugify(value: string) {
@@ -72,6 +88,22 @@ function CCPCSummaryMode({
   clusters: AIClusterResult["clusters"];
 }) {
   const summaryClusters = clusters as CCPCSummaryCluster[];
+  const groupedClusters = summaryClusters.reduce<
+    Record<string, { label: string; clusters: CCPCSummaryCluster[] }>
+  >((acc, cluster) => {
+    const target = cluster.target || {};
+    const label = target.occupationTitle
+      ? `Level ${target.level || "-"} - ${target.occupationTitle}`
+      : "CCPC";
+
+    if (!acc[label]) {
+      acc[label] = { label, clusters: [] };
+    }
+
+    acc[label].clusters.push(cluster);
+    return acc;
+  }, {});
+  const clusterGroups = Object.values(groupedClusters);
 
   if (summaryClusters.length === 0) {
     return (
@@ -83,7 +115,15 @@ function CCPCSummaryMode({
 
   return (
     <div className="space-y-5">
-      {summaryClusters.map((cluster, clusterIndex) => {
+      {clusterGroups.map((group) => (
+        <div key={group.label} className="space-y-5">
+          {clusterGroups.length > 1 ? (
+            <div className="rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4 text-sm font-bold text-blue-800">
+              {group.label}
+            </div>
+          ) : null}
+
+      {group.clusters.map((cluster, clusterIndex) => {
         const ccCode = `CC${pad2(clusterIndex + 1)}`;
         const units = cluster.items || [];
 
@@ -148,6 +188,8 @@ function CCPCSummaryMode({
           </div>
         );
       })}
+        </div>
+      ))}
     </div>
   );
 }
@@ -171,6 +213,7 @@ function CCPCPageContent() {
   const [isRunningClustering, setIsRunningClustering] = useState(false);
   const [sessionStatus, setSessionStatus] = useState<SessionStatus>("draft");
   const [targetInfo, setTargetInfo] = useState<COSTargetInfo | null>(null);
+  const [cosMatrixInfo, setCOSMatrixInfo] = useState<COSMatrixInfo | null>(null);
 
   const [projectInfo, setProjectInfo] = useState({
     title: "-",
@@ -205,9 +248,11 @@ function CCPCPageContent() {
 
         const data = await res.json();
         setTargetInfo(data.target || null);
+        setCOSMatrixInfo(data.matrix || null);
       } catch (error) {
         console.error("Gagal load target COS dari backend:", error);
         setTargetInfo(null);
+        setCOSMatrixInfo(null);
       }
     }
 
@@ -219,6 +264,26 @@ function CCPCPageContent() {
   }, [projectId]);
 
   const standardTitle = targetInfo?.occupationTitle || projectInfo.title;
+  const selectedDevelopmentTargets =
+    cosMatrixInfo?.selectedDevelopmentTargets ?? [];
+  const selectedDevelopmentLevels = Array.from(
+    new Set(
+      selectedDevelopmentTargets.length > 0
+        ? selectedDevelopmentTargets.map((target) => target.level)
+        : cosMatrixInfo?.selectedDevelopmentLevels ?? []
+    )
+  ).sort((a, b) => a - b);
+  const developmentLevelLabel =
+    selectedDevelopmentLevels.length > 0
+      ? selectedDevelopmentLevels.map((level) => `Level ${level}`).join(", ")
+      : projectInfo.tahap;
+  const selectedOccupationLabel =
+    selectedDevelopmentTargets.length > 0
+      ? selectedDevelopmentTargets
+          .map((target) => target.occupationTitle)
+          .filter(Boolean)
+          .join(", ")
+      : standardTitle;
 
   const sessionName = useMemo(() => {
     const slug = slugify(standardTitle || projectInfo.title || "dacum-session");
@@ -374,6 +439,7 @@ function CCPCPageContent() {
         },
         body: JSON.stringify({
           session_id: sessionName,
+          project_id: projectId,
         }),
       });
 
@@ -437,13 +503,28 @@ function CCPCPageContent() {
           projectTitle={`${projectInfo.code} - ${standardTitle}`}
           status={projectInfo.status}
           bidang={projectInfo.bidang}
-          tahap={projectInfo.tahap}
+          tahap={developmentLevelLabel}
           laluanKerjaya={projectInfo.laluanKerjaya}
           tarikhKemaskini={new Date().toLocaleDateString("ms-MY")}
           jumlahKompetensi={
             clusters.length > 0 ? `${clusters.length} Cluster` : "Belum Dijana"
           }
         />
+
+        {selectedDevelopmentLevels.length > 0 ? (
+          <div className="rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4 text-sm text-blue-800">
+            <span className="font-bold">Skop tahap pembangunan:</span>{" "}
+            {developmentLevelLabel}.
+            {selectedDevelopmentTargets.length > 0 ? (
+              <>
+                {" "}
+                <span className="font-bold">Jawatan dipilih:</span>{" "}
+                {selectedOccupationLabel}.
+              </>
+            ) : null}{" "}
+            AI clustering akan mengambil kira pilihan ini semasa membina CCPC.
+          </div>
+        ) : null}
 
         <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
           <span>Dashboard</span>
@@ -557,11 +638,6 @@ function CCPCPageContent() {
               />
             ) : null}
 
-            <DacumCardGrid
-              sessionId={sessionName}
-              sessionActive={sessionStatus === "active"}
-            />
-
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="mb-4 flex items-center justify-between">
                 <div>
@@ -604,6 +680,7 @@ function CCPCPageContent() {
               onSelect={setSelectedClusterId}
               readOnly={!canManageContent}
               proceedHref={`/ccp?projectId=${projectId}`}
+              sessionId={sessionName}
               onClustersChange={handleClusterListChange}
             />
           </>

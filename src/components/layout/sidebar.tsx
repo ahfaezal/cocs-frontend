@@ -7,7 +7,7 @@ import { sidebarMenu } from "@/data/menu";
 import { hasAnyPermission } from "@/lib/permissions";
 import { useCurrentUser } from "@/lib/use-current-user";
 
-function isActivePath(pathname: string, href: string) {
+function matchesPath(pathname: string, href: string) {
   if (href === "/") return pathname === "/";
 
   return pathname === href || pathname.startsWith(`${href}/`);
@@ -25,6 +25,11 @@ export function Sidebar() {
       ),
     }))
     .filter((section) => section.items.length > 0);
+
+  const activeHref = visibleSections
+    .flatMap((section) => section.items)
+    .filter((item) => matchesPath(pathname, item.href))
+    .sort((a, b) => b.href.length - a.href.length)[0]?.href;
 
   return (
     <aside className="flex min-h-screen w-[290px] flex-col bg-[#071d49] text-white">
@@ -48,7 +53,7 @@ export function Sidebar() {
             <div className="space-y-1">
               {section.items.map((item) => {
                 const Icon = item.icon;
-                const active = isActivePath(pathname, item.href);
+                const active = activeHref === item.href;
 
                 return (
                   <Link

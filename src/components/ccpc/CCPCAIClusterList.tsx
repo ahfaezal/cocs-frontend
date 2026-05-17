@@ -15,11 +15,18 @@ import {
   Save,
   Trash2,
 } from "lucide-react";
+import { API_URL } from "@/lib/env";
 
 type AICluster = BaseAICluster & {
   clusterName?: string;
   items?: string[];
   finalised?: boolean;
+  target?: {
+    occupationTitle?: string;
+    level?: string | number;
+    subarea?: string;
+  };
+  targetIndex?: number;
 };
 
 type EditableCluster = {
@@ -28,6 +35,8 @@ type EditableCluster = {
   items: string[];
   finalised: boolean;
   source?: AICluster;
+  target?: AICluster["target"];
+  targetIndex?: number;
 };
 
 interface CCPCAIClusterListProps {
@@ -36,6 +45,7 @@ interface CCPCAIClusterListProps {
   onSelect: (clusterId: string) => void;
   readOnly?: boolean;
   proceedHref?: string;
+  sessionId?: string;
   onClustersChange?: (clusters: AICluster[]) => void;
 }
 
@@ -56,11 +66,14 @@ export function CCPCAIClusterList({
   onSelect,
   readOnly = false,
   proceedHref,
+  sessionId,
   onClustersChange,
 }: CCPCAIClusterListProps) {
   const [editableClusters, setEditableClusters] = useState<EditableCluster[]>(
     []
   );
+  const [savingAll, setSavingAll] = useState(false);
+  const [allSaved, setAllSaved] = useState(false);
 
   useEffect(() => {
     const mapped = clusters.map((cluster, index) => {
@@ -75,11 +88,14 @@ export function CCPCAIClusterList({
         items: normaliseClusterItems(cluster),
         finalised: Boolean(cluster.finalised),
         source: cluster,
+        target: cluster.target,
+        targetIndex: cluster.targetIndex,
       };
     });
 
     const timer = window.setTimeout(() => {
       setEditableClusters(mapped);
+      setAllSaved(mapped.length > 0 && mapped.every((cluster) => cluster.finalised));
     }, 0);
 
     return () => window.clearTimeout(timer);
@@ -105,11 +121,15 @@ export function CCPCAIClusterList({
           "Core Candidate") as ClusterSuggestionCategory,
         notes: cluster.source?.notes ?? "",
         finalised: cluster.finalised,
+        target: cluster.target,
+        targetIndex: cluster.targetIndex,
       };
     });
   }
 
   function publishClusters(next: EditableCluster[]) {
+    setAllSaved(false);
+
     if (!onClustersChange) return;
 
     window.setTimeout(() => {
@@ -262,6 +282,41 @@ export function CCPCAIClusterList({
   ).length;
   const allFinalised =
     editableClusters.length > 0 && finalisedCount === editableClusters.length;
+  const canProceed = allFinalised && allSaved;
+
+  async function saveAllClusters() {
+    if (readOnly || !sessionId || !allFinalised) return;
+
+    try {
+      setSavingAll(true);
+      const clustersToSave = toAIClusters(editableClusters);
+
+      const res = await fetch(`${API_URL}/ccpc/clusters/${sessionId}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ clusters: clustersToSave }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Gagal menyimpan hasil CCPC.");
+      }
+
+      publishClusters(editableClusters);
+      setAllSaved(true);
+      alert("Semua hasil finalised telah disimpan.");
+    } catch (error) {
+      console.error("Gagal simpan semua cluster:", error);
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Gagal menyimpan hasil finalised."
+      );
+    } finally {
+      setSavingAll(false);
+    }
+  }
 
   if (!editableClusters || editableClusters.length === 0) {
     return (
@@ -323,7 +378,7 @@ export function CCPCAIClusterList({
               Tambah Nama Cluster
             </button>
 
-            {allFinalised && proceedHref ? (
+            {canProceed && proceedHref ? (
               <Link
                 href={proceedHref}
                 className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
@@ -335,7 +390,7 @@ export function CCPCAIClusterList({
               <button
                 type="button"
                 disabled
-                title="Finalise semua cluster sebelum teruskan ke CCP"
+                title="Finalise semua cluster dan klik Save di bawah sebelum teruskan ke CCP"
                 className="inline-flex cursor-not-allowed items-center gap-2 rounded-xl bg-slate-300 px-4 py-2.5 text-sm font-semibold text-white"
               >
                 <ArrowRight size={16} />
@@ -354,6 +409,10 @@ export function CCPCAIClusterList({
         {!allFinalised && !readOnly ? (
           <span className="ml-2 text-slate-500">
             Finalise semua cluster untuk aktifkan Proceed to CCP.
+          </span>
+        ) : allFinalised && !allSaved && !readOnly ? (
+          <span className="ml-2 text-slate-500">
+            Klik Save di bawah untuk menyimpan hasil finalised sebelum proceed.
           </span>
         ) : null}
       </div>
@@ -378,6 +437,13 @@ export function CCPCAIClusterList({
                   <div className="mb-2 text-sm font-bold text-blue-700">
                     CL-{String(index + 1).padStart(2, "0")}
                   </div>
+
+                  {cluster.target?.occupationTitle ? (
+                    <div className="mb-3 inline-flex rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-700">
+                      Level {cluster.target.level || "-"} -{" "}
+                      {cluster.target.occupationTitle}
+                    </div>
+                  ) : null}
 
                   <label className="mb-1 block text-xs font-semibold text-slate-500">
                     Nama Cluster
@@ -531,6 +597,47 @@ export function CCPCAIClusterList({
           );
         })}
       </div>
+
+      {!readOnly ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4">
+          <p className="text-sm text-slate-500">
+            {allSaved
+              ? "Hasil finalised telah disimpan. Anda boleh teruskan ke CCP."
+              : "Selepas semua cluster difinalise, klik Save untuk simpan hasil sebelum proceed."}
+          </p>
+
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={saveAllClusters}
+              disabled={!allFinalised || savingAll || !sessionId}
+              className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
+            >
+              <Save size={16} />
+              {savingAll ? "Menyimpan..." : "Save Hasil Finalised"}
+            </button>
+
+            {canProceed && proceedHref ? (
+              <Link
+                href={proceedHref}
+                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
+              >
+                <ArrowRight size={16} />
+                Proceed to CCP
+              </Link>
+            ) : (
+              <button
+                type="button"
+                disabled
+                className="inline-flex cursor-not-allowed items-center gap-2 rounded-xl bg-slate-300 px-4 py-2.5 text-sm font-semibold text-white"
+              >
+                <ArrowRight size={16} />
+                Proceed to CCP
+              </button>
+            )}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowRight, ChevronRight, Info, Plus, Trash2 } from "lucide-react";
+import { ArrowRight, ChevronRight, Info, Plus, Save, Trash2 } from "lucide-react";
 
 import { getAuthToken } from "@/lib/auth";
 import { API_URL } from "@/lib/env";
@@ -20,9 +20,18 @@ type ProjectInfo = {
   status: string;
 };
 
+type COSDevelopmentTarget = {
+  level: number;
+  columnIndex: number;
+  occupationTitle?: string;
+  subarea?: string;
+};
+
 type COSMatrix = {
   subareas: string[];
   levels: Record<number, string[]>;
+  selectedDevelopmentLevels: number[];
+  selectedDevelopmentTargets: COSDevelopmentTarget[];
   selectedTarget: {
     level: number;
     columnIndex: number;
@@ -120,6 +129,15 @@ function COSDocumentMode({
 
 const LEVELS = [6, 5, 4, 3, 2, 1];
 
+const COMPETENCY_LEVEL_DEFINITIONS: Record<number, string> = {
+  1: "Basic general and foundation knowledge and skills under close supervision.",
+  2: "Basic factual or operational knowledge and routine skills with limited autonomy under supervisor observation.",
+  3: "Broad operational and theoretical knowledge for clearly defined skilled work with limited responsibility.",
+  4: "Broad knowledge with some specialised skills to plan, coordinate and evaluate work within well-defined parameters.",
+  5: "Integrated technical and theoretical competence for advanced skilled or professional work within specialised parameters.",
+  6: "Specialised knowledge for advanced skilled or professional work, management functions and complex issue resolution.",
+};
+
 function createEmptyMatrix(): COSMatrix {
   return {
     subareas: ["Subarea 1", "Subarea 2"],
@@ -131,6 +149,8 @@ function createEmptyMatrix(): COSMatrix {
       2: ["", ""],
       1: ["", ""],
     },
+    selectedDevelopmentLevels: [],
+    selectedDevelopmentTargets: [],
     selectedTarget: null,
   };
 }
@@ -146,6 +166,34 @@ function getSelectedTarget(matrix: COSMatrix, projectId: string) {
     subarea: matrix.subareas[columnIndex] || "",
     level,
     columnIndex,
+  };
+}
+
+function getDevelopmentTargets(matrix: COSMatrix) {
+  return (matrix.selectedDevelopmentTargets ?? [])
+    .map((target) => ({
+      ...target,
+      occupationTitle: matrix.levels[target.level]?.[target.columnIndex] || "",
+      subarea: matrix.subareas[target.columnIndex] || "",
+    }))
+    .filter((target) => target.occupationTitle.trim());
+}
+
+function getSelectedDevelopmentLevels(matrix: COSMatrix) {
+  return Array.from(
+    new Set(getDevelopmentTargets(matrix).map((target) => target.level))
+  ).sort((a, b) => a - b);
+}
+
+function normalizeMatrixForSave(matrix: COSMatrix): COSMatrix {
+  const selectedDevelopmentTargets = getDevelopmentTargets(matrix);
+
+  return {
+    ...matrix,
+    selectedDevelopmentTargets,
+    selectedDevelopmentLevels: Array.from(
+      new Set(selectedDevelopmentTargets.map((target) => target.level))
+    ).sort((a, b) => a - b),
   };
 }
 
@@ -217,6 +265,9 @@ function COSPageContent() {
 
   const [matrix, setMatrix] = useState<COSMatrix>(() => createEmptyMatrix());
   const [viewMode, setViewMode] = useState<"builder" | "document">("builder");
+  const [saving, setSaving] = useState(false);
+  const [hasSavedCOS, setHasSavedCOS] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(true);
 
   useEffect(() => {
     async function loadProject() {
@@ -277,17 +328,27 @@ function COSPageContent() {
             setMatrix({
               ...createEmptyMatrix(),
               ...backendData.matrix,
+              selectedDevelopmentLevels:
+                backendData.matrix.selectedDevelopmentLevels ?? [],
+              selectedDevelopmentTargets:
+                backendData.matrix.selectedDevelopmentTargets ?? [],
               selectedTarget: backendData.matrix.selectedTarget ?? null,
             });
+            setHasSavedCOS(true);
+            setHasUnsavedChanges(false);
 
             return;
           }
 
           setMatrix(createEmptyMatrix());
+          setHasSavedCOS(false);
+          setHasUnsavedChanges(true);
         } catch (error) {
           console.error("Gagal load COS dari backend:", error);
           setErrorMessage("Gagal memuatkan struktur COS dari backend.");
           setMatrix(createEmptyMatrix());
+          setHasSavedCOS(false);
+          setHasUnsavedChanges(true);
         }
       }
 
@@ -296,6 +357,8 @@ function COSPageContent() {
 
 
   function updateSubarea(index: number, value: string) {
+    setMessage("");
+    setHasUnsavedChanges(true);
     setMatrix((prev) => ({
       ...prev,
       subareas: prev.subareas.map((item, itemIndex) =>
@@ -305,6 +368,8 @@ function COSPageContent() {
   }
 
   function addSubarea() {
+    setMessage("");
+    setHasUnsavedChanges(true);
     setMatrix((prev) => {
       const nextSubareas = [
         ...prev.subareas,
@@ -322,6 +387,8 @@ function COSPageContent() {
       return {
         subareas: nextSubareas,
         levels: nextLevels,
+        selectedDevelopmentLevels: prev.selectedDevelopmentLevels,
+        selectedDevelopmentTargets: prev.selectedDevelopmentTargets ?? [],
         selectedTarget: prev.selectedTarget,
       };
     });
@@ -339,6 +406,8 @@ function COSPageContent() {
 
     if (!confirmDelete) return;
 
+    setMessage("");
+    setHasUnsavedChanges(true);
     setMatrix((prev) => {
       const nextSubareas = prev.subareas.filter(
         (_, itemIndex) => itemIndex !== index
@@ -364,27 +433,57 @@ function COSPageContent() {
               }
             : prev.selectedTarget;
 
+      const selectedDevelopmentTargets = (prev.selectedDevelopmentTargets ?? [])
+        .filter((target) => target.columnIndex !== index)
+        .map((target) =>
+          target.columnIndex > index
+            ? { ...target, columnIndex: target.columnIndex - 1 }
+            : target
+        );
+
       return {
         subareas: nextSubareas,
         levels: nextLevels,
+        selectedDevelopmentLevels: Array.from(
+          new Set(selectedDevelopmentTargets.map((target) => target.level))
+        ).sort((a, b) => a - b),
+        selectedDevelopmentTargets,
         selectedTarget,
       };
     });
   }
 
   function updateLevelValue(level: number, columnIndex: number, value: string) {
-    setMatrix((prev) => ({
-      ...prev,
-      levels: {
-        ...prev.levels,
-        [level]: prev.levels[level].map((item, itemIndex) =>
-          itemIndex === columnIndex ? value : item
-        ),
-      },
-    }));
+    setMessage("");
+    setHasUnsavedChanges(true);
+    setMatrix((prev) => {
+      const currentTargets = prev.selectedDevelopmentTargets ?? [];
+      const selectedDevelopmentTargets = value.trim()
+        ? currentTargets
+        : currentTargets.filter(
+            (target) =>
+              !(target.level === level && target.columnIndex === columnIndex)
+          );
+
+      return {
+        ...prev,
+        selectedDevelopmentTargets,
+        selectedDevelopmentLevels: Array.from(
+          new Set(selectedDevelopmentTargets.map((target) => target.level))
+        ).sort((a, b) => a - b),
+        levels: {
+          ...prev.levels,
+          [level]: prev.levels[level].map((item, itemIndex) =>
+            itemIndex === columnIndex ? value : item
+          ),
+        },
+      };
+    });
   }
 
   function selectTargetOccupation(level: number, columnIndex: number) {
+    setMessage("");
+    setHasUnsavedChanges(true);
     setMatrix((prev) => ({
       ...prev,
       selectedTarget: {
@@ -392,6 +491,41 @@ function COSPageContent() {
         columnIndex,
       },
     }));
+  }
+
+  function toggleDevelopmentTarget(level: number, columnIndex: number) {
+    setMessage("");
+    setErrorMessage("");
+    setHasUnsavedChanges(true);
+    setMatrix((prev) => {
+      const currentTargets = prev.selectedDevelopmentTargets ?? [];
+      const exists = currentTargets.some(
+        (target) => target.level === level && target.columnIndex === columnIndex
+      );
+
+      const selectedDevelopmentTargets = exists
+        ? currentTargets.filter(
+            (target) =>
+              !(target.level === level && target.columnIndex === columnIndex)
+          )
+        : [
+            ...currentTargets,
+            {
+              level,
+              columnIndex,
+              occupationTitle: prev.levels[level]?.[columnIndex] || "",
+              subarea: prev.subareas[columnIndex] || "",
+            },
+          ];
+
+      return {
+        ...prev,
+        selectedDevelopmentTargets,
+        selectedDevelopmentLevels: Array.from(
+          new Set(selectedDevelopmentTargets.map((target) => target.level))
+        ).sort((a, b) => a - b),
+      };
+    });
   }
 
   const selectedTargetTitle = matrix.selectedTarget
@@ -403,30 +537,64 @@ function COSPageContent() {
   const selectedTargetSubarea = matrix.selectedTarget
     ? matrix.subareas[matrix.selectedTarget.columnIndex] || ""
     : "";
+  const selectedDevelopmentTargets = getDevelopmentTargets(matrix);
+  const selectedDevelopmentLevels = getSelectedDevelopmentLevels(matrix);
 
-  async function saveAndNext() {
+  async function handleSaveCOS() {
     if (!projectId) {
       setErrorMessage("Project ID tidak ditemui. Sila pilih projek dahulu.");
-      return;
+      return false;
     }
 
     const target = getSelectedTarget(matrix, projectId);
+    const nextMatrix = normalizeMatrixForSave(matrix);
 
-    if (!target?.occupationTitle?.trim()) {
-      setErrorMessage("Sila pilih Tajuk Fokus sebelum meneruskan ke CCPC.");
-      return;
+    if (nextMatrix.selectedDevelopmentTargets.length === 0) {
+      setErrorMessage(
+        "Sila tick sekurang-kurangnya satu nama jawatan dalam jadual COS sebelum Save."
+      );
+      return false;
     }
 
     try {
+      setSaving(true);
       setErrorMessage("");
+      setMessage("");
 
-    await saveCOSToBackend(projectId, matrix, target);
+      await saveCOSToBackend(
+        projectId,
+        nextMatrix,
+        target?.occupationTitle?.trim() ? target : null
+      );
 
-      router.push(`/ccpc?projectId=${projectId}`);
+      setMatrix(nextMatrix);
+      setHasSavedCOS(true);
+      setHasUnsavedChanges(false);
+      setMessage("COS berjaya disimpan. Anda boleh teruskan ke CCPC.");
+      return true;
     } catch (error) {
       console.error("Gagal simpan COS:", error);
       setErrorMessage("Gagal menyimpan struktur COS ke backend.");
+      return false;
+    } finally {
+      setSaving(false);
     }
+  }
+
+  function handleNext() {
+    if (!hasSavedCOS || hasUnsavedChanges) {
+      setErrorMessage("Sila klik Save untuk simpan COS sebelum meneruskan ke CCPC.");
+      return;
+    }
+
+    if (selectedDevelopmentTargets.length === 0) {
+      setErrorMessage(
+        "Sila tick sekurang-kurangnya satu nama jawatan dalam jadual COS sebelum meneruskan ke CCPC."
+      );
+      return;
+    }
+
+    router.push(`/ccpc?projectId=${projectId}`);
   }
 
   if (!projectId) {
@@ -589,9 +757,35 @@ function COSPageContent() {
           </>
         ) : (
           <div className="mt-1 text-sm text-slate-600">
-            Pilih satu jawatan pada row tahap sasaran untuk dijadikan tajuk utama dokumen.
+            Pilih jawatan pada tahap sasaran jika tahap telah ditetapkan. Jika
+            belum, COS boleh disimpan dahulu dan tajuk fokus dipilih kemudian.
           </div>
         )}
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-200 px-6 py-5">
+          <h2 className="text-lg font-bold text-blue-700">
+            Skop Tahap Pembangunan
+          </h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Rujukan ringkas tahap CSQF. Pilihan sebenar dibuat melalui tick pada nama jawatan dalam jadual COS.
+          </p>
+        </div>
+
+        <div className="grid gap-3 p-6 md:grid-cols-2 xl:grid-cols-3">
+          {[1, 2, 3, 4, 5, 6].map((level) => (
+            <div
+              key={`development-level-${level}`}
+              className="min-h-28 rounded-xl border border-slate-200 bg-white p-4"
+            >
+              <div className="font-bold text-slate-900">Level {level}</div>
+              <p className="mt-1 text-sm leading-6 text-slate-600">
+                {COMPETENCY_LEVEL_DEFINITIONS[level]}
+              </p>
+            </div>
+          ))}
+        </div>
       </div>
 
       {viewMode === "document" ? (
@@ -714,6 +908,16 @@ function COSPageContent() {
                         key={`${level}-${columnIndex}`}
                         className="border border-slate-300 px-3 py-3"
                       >
+                        {(() => {
+                          const selectedForCCPC =
+                            (matrix.selectedDevelopmentTargets ?? []).some(
+                              (target) =>
+                                target.level === level &&
+                                target.columnIndex === columnIndex
+                            );
+
+                          return (
+                            <>
                         <input
                           value={value}
                           onChange={(event) =>
@@ -727,6 +931,29 @@ function COSPageContent() {
                           className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-center text-slate-900 outline-none focus:border-blue-500 disabled:bg-slate-50"
                           placeholder="Masukkan jawatan"
                         />
+
+                        <label
+                          className={`mt-2 flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold transition ${
+                            selectedForCCPC
+                              ? "border-blue-200 bg-blue-50 text-blue-700"
+                              : "border-slate-200 bg-white text-slate-500"
+                          } ${
+                            !canEditCOS || !value.trim()
+                              ? "cursor-not-allowed opacity-60"
+                              : "cursor-pointer hover:border-blue-200 hover:bg-blue-50"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedForCCPC}
+                            onChange={() =>
+                              toggleDevelopmentTarget(level, columnIndex)
+                            }
+                            disabled={!canEditCOS || !value.trim()}
+                            className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          Pilih untuk CCPC
+                        </label>
 
                         {target ? (
                           <>
@@ -752,6 +979,9 @@ function COSPageContent() {
                             </div>
                           </>
                         ) : null}
+                            </>
+                          );
+                        })()}
                       </td>
                     ))}
                   </tr>
@@ -764,15 +994,47 @@ function COSPageContent() {
 
       )}
 
-      <div className="flex flex-wrap items-center justify-end">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <p className="text-sm text-slate-500">
+          {hasSavedCOS && !hasUnsavedChanges
+            ? "COS telah disimpan dan sedia untuk proses CCPC."
+            : "Tick nama jawatan yang hendak dibangunkan, kemudian klik Save sebelum bergerak ke langkah seterusnya."}
+          {selectedDevelopmentTargets.length > 0 ? (
+            <span className="ml-2 font-semibold text-blue-700">
+              {selectedDevelopmentTargets.length} jawatan dipilih
+              {selectedDevelopmentLevels.length > 0
+                ? ` (${selectedDevelopmentLevels.map((level) => `Level ${level}`).join(", ")})`
+                : ""}
+            </span>
+          ) : null}
+        </p>
+
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <button
+            type="button"
+            onClick={handleSaveCOS}
+            disabled={saving || !canEditCOS}
+            className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-white px-5 py-3 font-semibold text-blue-700 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
+          >
+            <Save size={16} />
+            {saving ? "Menyimpan..." : "Save"}
+          </button>
+
         <button
           type="button"
-          onClick={saveAndNext}
-          className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white transition hover:bg-blue-700"
+            onClick={handleNext}
+            disabled={
+              saving ||
+              !hasSavedCOS ||
+              hasUnsavedChanges ||
+              selectedDevelopmentTargets.length === 0
+            }
+            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
         >
-          Simpan & Seterusnya
+            Seterusnya
           <ArrowRight size={16} />
         </button>
+        </div>
       </div>
     </div>
   );
