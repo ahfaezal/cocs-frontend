@@ -553,6 +553,21 @@ function CCPCPageContent() {
     );
   }
 
+  async function readResponseError(res: Response) {
+    const body = await res.text();
+
+    if (!body) {
+      return `HTTP ${res.status}`;
+    }
+
+    try {
+      const data = JSON.parse(body);
+      return data.message || data.detail || body;
+    } catch {
+      return body;
+    }
+  }
+
   async function handleConsolidatePackage() {
     if (!canManageContent || selectedPackageKeys.length < 2) {
       alert("Pilih sekurang-kurangnya dua level/jawatan untuk digabungkan.");
@@ -585,7 +600,8 @@ function CCPCPageContent() {
       );
 
       if (!res.ok) {
-        throw new Error("AI gabungan gagal dijalankan.");
+        const detail = await readResponseError(res);
+        throw new Error(`AI gabungan gagal dijalankan (${res.status}): ${detail}`);
       }
 
       const data = await res.json();
