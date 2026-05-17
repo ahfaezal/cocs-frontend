@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { API_URL } from "@/lib/env";
 
@@ -13,8 +13,49 @@ export default function PanelInputPage() {
   const [panelOrganization, setPanelOrganization] = useState("");
   const [task, setTask] = useState("");
   const [loading, setLoading] = useState(false);
+  const [submittedCount, setSubmittedCount] = useState(0);
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+
+  useEffect(() => {
+    if (!session || !panelName.trim()) {
+      setSubmittedCount(0);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadPanelCount() {
+      try {
+        const res = await fetch(`${API_URL}/ccpc/cards/${session}`, {
+          cache: "no-store",
+        });
+
+        if (!res.ok) return;
+
+        const data = await res.json();
+        const cards = Array.isArray(data) ? data : [];
+        const currentPanelName = panelName.trim().toLowerCase();
+        const count = cards.filter(
+          (card) =>
+            String(card.panel_name || "").trim().toLowerCase() ===
+            currentPanelName
+        ).length;
+
+        if (!cancelled) {
+          setSubmittedCount(count);
+        }
+      } catch (error) {
+        console.error("Gagal mendapatkan jumlah kad panel:", error);
+      }
+    }
+
+    loadPanelCount();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [panelName, session]);
 
   async function handleSubmit() {
     if (!task.trim()) return;
@@ -42,8 +83,13 @@ export default function PanelInputPage() {
         throw new Error("Gagal hantar kad");
       }
 
+      const nextCount = submittedCount + 1;
+
+      setSubmittedCount(nextCount);
       setTask("");
-      setSuccessMessage("Kad DACUM berjaya dihantar ke Live Board.");
+      setSuccessMessage(
+        `Jumlah kad dihantar: ${nextCount}. Kad DACUM berjaya dihantar ke Live Board.`
+      );
     } catch (error) {
       console.error(error);
       setErrorMessage(
