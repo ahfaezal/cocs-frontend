@@ -1,15 +1,25 @@
 ﻿"use client";
 
+import { useEffect, useState } from "react";
 import { CircleDot, Clock3, StickyNote, Users } from "lucide-react";
+import { API_URL } from "@/lib/env";
 
 type SessionStatus = "draft" | "active" | "closed";
 
 type DacumSessionCardProps = {
   standardTitle?: string;
   readOnly?: boolean;
+  sessionId?: string;
   sessionStatus?: SessionStatus;
   onActivateSession?: () => void;
   onCloseSession?: () => void;
+};
+
+type CCPCCard = {
+  id: number;
+  panel_name: string;
+  task_text: string;
+  created_at: string;
 };
 
 const statusConfig: Record<
@@ -36,12 +46,67 @@ const statusConfig: Record<
 export function DacumSessionCard({
   standardTitle,
   readOnly = false,
+  sessionId = "",
   sessionStatus = "draft",
   onActivateSession,
   onCloseSession,
 }: DacumSessionCardProps) {
   const finalStandardTitle = standardTitle || "Belum ditetapkan";
   const currentStatus = statusConfig[sessionStatus];
+  const [cardCount, setCardCount] = useState(0);
+  const [panelCount, setPanelCount] = useState(0);
+
+  useEffect(() => {
+    if (!sessionId) {
+      setCardCount(0);
+      setPanelCount(0);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadCounts() {
+      try {
+        const res = await fetch(`${API_URL}/ccpc/cards/${sessionId}`, {
+          cache: "no-store",
+        });
+
+        if (!res.ok) {
+          throw new Error("Gagal mendapatkan kiraan kad DACUM.");
+        }
+
+        const data: CCPCCard[] = await res.json();
+        const cards = Array.isArray(data) ? data : [];
+
+        if (!cancelled) {
+          setCardCount(cards.length);
+          setPanelCount(
+            new Set(
+              cards
+                .map((card) => card.panel_name?.trim())
+                .filter((name): name is string => Boolean(name))
+            ).size
+          );
+        }
+      } catch (error) {
+        console.error("Gagal load kiraan sesi DACUM:", error);
+
+        if (!cancelled) {
+          setCardCount(0);
+          setPanelCount(0);
+        }
+      }
+    }
+
+    loadCounts();
+
+    const timer = window.setInterval(loadCounts, 3000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [sessionId]);
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -94,7 +159,7 @@ export function DacumSessionCard({
               Jumlah Panel
             </div>
             <div className="mt-2 text-lg font-semibold text-slate-900">
-              8 Panel
+              {panelCount} Panel
             </div>
           </div>
 
@@ -104,7 +169,7 @@ export function DacumSessionCard({
               Kad Diterima
             </div>
             <div className="mt-2 text-lg font-semibold text-slate-900">
-              36 Kad
+              {cardCount} Kad
             </div>
           </div>
         </div>

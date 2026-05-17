@@ -72,7 +72,7 @@ export function DacumCardGrid({
     };
   }, [sessionActive, sessionId]);
 
-  if (!sessionActive || (!loading && !error && cards.length === 0)) {
+  if (!sessionActive) {
     return null;
   }
 
@@ -129,6 +129,12 @@ export function DacumCardGrid({
             ))}
           </div>
         </>
+      )}
+
+      {!loading && !error && cards.length === 0 && (
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500 shadow-sm">
+          Belum ada kad DACUM untuk session ini.
+        </div>
       )}
     </div>
   );

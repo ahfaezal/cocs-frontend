@@ -612,6 +612,7 @@ function CCPCPageContent() {
               <DacumSessionCard
                 standardTitle={standardTitle}
                 readOnly={!canManageContent}
+                sessionId={sessionName}
                 sessionStatus={sessionStatus}
                 onActivateSession={handleActivateSession}
                 onCloseSession={handleCloseSession}
