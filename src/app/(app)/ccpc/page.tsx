@@ -75,6 +75,10 @@ type CCPCPackage = {
   mode?: string;
 };
 
+function normaliseTargetValue(value: unknown) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
 function slugify(value: string) {
   return value
     .toLowerCase()
@@ -87,7 +91,18 @@ function pad2(value: number) {
 }
 
 function getTargetKey(target?: Record<string, unknown> | CCPCSummaryCluster["target"]) {
-  return `${target?.level || "-"}-${target?.occupationTitle || "CCPC"}`;
+  const level = normaliseTargetValue(target?.level) || "-";
+  const occupation = normaliseTargetValue(target?.occupationTitle) || "ccpc";
+  const subarea = normaliseTargetValue(target?.subarea);
+
+  return [level, occupation, subarea].filter(Boolean).join("|");
+}
+
+function getTargetLabel(target?: Record<string, unknown> | CCPCSummaryCluster["target"]) {
+  const level = String(target?.level || "-").trim();
+  const occupation = String(target?.occupationTitle || "CCPC").trim();
+
+  return occupation ? `Level ${level} - ${occupation}` : "CCPC";
 }
 
 function getPackageLevelLabel(targets: Array<Record<string, unknown>>) {
@@ -292,10 +307,8 @@ function groupClustersForPackaging(clusters: AIClusterResult["clusters"]) {
 
   summaryClusters.forEach((cluster) => {
     const target = cluster.target || {};
-    const key = `${target.level || "-"}-${target.occupationTitle || "CCPC"}`;
-    const label = target.occupationTitle
-      ? `Level ${target.level || "-"} - ${target.occupationTitle}`
-      : "CCPC";
+    const key = getTargetKey(target);
+    const label = getTargetLabel(target);
 
     if (!groups.has(key)) {
       groups.set(key, {
@@ -389,6 +402,59 @@ function CCPCPageContent() {
     [aiClusterResult, displayClusters]
   );
 
+  async function loadCCPCClusters() {
+    if (!sessionName) return;
+
+    try {
+      const res = await fetch(`${API_URL}/ccpc/clusters/${sessionName}`, {
+        cache: "no-store",
+      });
+
+      if (!res.ok) {
+        setAiClusterResult(null);
+        setSelectedClusterId(null);
+        return;
+      }
+
+      const data = await res.json();
+      const backendClusters = Array.isArray(data) ? data : data.clusters || [];
+
+      if (backendClusters.length === 0) {
+        setAiClusterResult(null);
+        setSelectedClusterId(null);
+        return;
+      }
+
+      setAiClusterResult(toAIClusterResult(backendClusters));
+      setSelectedClusterId(String(backendClusters?.[0]?.id || ""));
+    } catch (error) {
+      console.error("Gagal load CCPC clusters dari backend:", error);
+      setAiClusterResult(null);
+      setSelectedClusterId(null);
+    }
+  }
+
+  async function loadPackages() {
+    if (!sessionName) return;
+
+    try {
+      const res = await fetch(`${API_URL}/ccpc/packages/${sessionName}`, {
+        cache: "no-store",
+      });
+
+      if (!res.ok) {
+        setCCPCPackages([]);
+        return;
+      }
+
+      const data = await res.json();
+      setCCPCPackages(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Gagal load CCPC packages:", error);
+      setCCPCPackages([]);
+    }
+  }
+
   useEffect(() => {
     const validKeys = new Set(targetGroups.map((group) => group.key));
     setSelectedDocumentKeys((prev) =>
@@ -464,36 +530,6 @@ function CCPCPageContent() {
   useEffect(() => {
     if (!sessionName) return;
 
-    async function loadCCPCClusters() {
-      try {
-        const res = await fetch(`${API_URL}/ccpc/clusters/${sessionName}`, {
-          cache: "no-store",
-        });
-
-        if (!res.ok) {
-          setAiClusterResult(null);
-          setSelectedClusterId(null);
-          return;
-        }
-
-        const data = await res.json();
-        const backendClusters = Array.isArray(data) ? data : data.clusters || [];
-
-        if (backendClusters.length === 0) {
-          setAiClusterResult(null);
-          setSelectedClusterId(null);
-          return;
-        }
-
-        setAiClusterResult(toAIClusterResult(backendClusters));
-        setSelectedClusterId(String(backendClusters?.[0]?.id || ""));
-      } catch (error) {
-        console.error("Gagal load CCPC clusters dari backend:", error);
-        setAiClusterResult(null);
-        setSelectedClusterId(null);
-      }
-    }
-
     const timer = window.setTimeout(() => {
       loadCCPCClusters();
     }, 0);
@@ -503,21 +539,6 @@ function CCPCPageContent() {
 
   useEffect(() => {
     if (!sessionName) return;
-
-    async function loadPackages() {
-      try {
-        const res = await fetch(`${API_URL}/ccpc/packages/${sessionName}`, {
-          cache: "no-store",
-        });
-
-        if (!res.ok) return;
-
-        const data = await res.json();
-        setCCPCPackages(Array.isArray(data) ? data : []);
-      } catch (error) {
-        console.error("Gagal load CCPC packages:", error);
-      }
-    }
 
     loadPackages();
   }, [sessionName]);
@@ -842,6 +863,8 @@ function CCPCPageContent() {
         )
       );
       setSelectedPackageKeys([]);
+      setSelectedDocumentKeys([]);
+      await Promise.all([loadCCPCClusters(), loadPackages()]);
     } catch (error) {
       console.error("Gagal batalkan pakej gabungan:", error);
       alert(
