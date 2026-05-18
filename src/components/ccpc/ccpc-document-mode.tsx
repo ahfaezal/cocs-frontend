@@ -1,5 +1,7 @@
 "use client";
 
+import { Download } from "lucide-react";
+
 type CCPCClusterCard =
   | string
   | {
@@ -141,8 +143,69 @@ export function CCPCDocumentMode({
 }: CCPCDocumentModeProps) {
   const ccpcGroups = groupClustersByTarget(clusters);
 
+  function handleDownloadPdf() {
+    window.print();
+  }
+
   return (
     <div className="space-y-6">
+      <div className="ccpc-no-print flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+        <div>
+          <h2 className="text-lg font-bold text-blue-700">
+            Document Mode CCPC
+          </h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Paparan disusun mengikut saiz A4 landscape. Jika pilihan dokumen
+            dibuat di Builder Mode, hanya pilihan tersebut dipaparkan di sini.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleDownloadPdf}
+          className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
+        >
+          <Download size={16} />
+          Download PDF
+        </button>
+      </div>
+
+      <style jsx global>{`
+        @media print {
+          @page {
+            size: A4 landscape;
+            margin: 8mm;
+          }
+
+          body * {
+            visibility: hidden !important;
+          }
+
+          #ccpc-document-print,
+          #ccpc-document-print * {
+            visibility: visible !important;
+          }
+
+          #ccpc-document-print {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+          }
+
+          .ccpc-no-print {
+            display: none !important;
+          }
+
+          .ccpc-a4-page {
+            margin: 0 !important;
+            box-shadow: none !important;
+            page-break-after: always;
+          }
+        }
+      `}</style>
+
+      <div id="ccpc-document-print" className="space-y-6 overflow-x-auto">
       {ccpcGroups.map((ccpcGroup, groupIndex) => {
         const documentTitle = ccpcGroup.title || cocsTitle;
         const documentLevel = ccpcGroup.level || cocsLevel;
@@ -151,9 +214,10 @@ export function CCPCDocumentMode({
         return (
           <div
             key={`ccpc-document-${groupIndex}-${documentTitle}`}
-            className="w-full overflow-x-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
+            className="ccpc-a4-page mx-auto overflow-x-auto rounded-2xl border border-slate-200 bg-white p-[10mm] shadow-sm"
+            style={{ width: "297mm", minHeight: "210mm" }}
           >
-            <div className="min-w-[980px] font-serif text-[14px] text-black">
+            <div className="font-serif text-[11px] text-black">
         <h1 className="mb-4 text-[16px] font-bold">
           Construction Competency Profile Chart (CCPC)
         </h1>
@@ -207,7 +271,7 @@ export function CCPCDocumentMode({
           </tbody>
         </table>
 
-        <div className="mb-4 grid grid-cols-[210px_1fr] gap-5">
+        <div className="mb-4 grid grid-cols-[32mm_1fr] gap-[4mm]">
           <div className="border border-black bg-[#d9d9d9] py-2 text-center">
             CORE
             <br />
@@ -219,7 +283,7 @@ export function CCPCDocumentMode({
           </div>
         </div>
 
-        <div className="space-y-5">
+        <div className="space-y-[4mm]">
           {ccpcGroup.clusters.map((cluster, clusterIndex) => {
             const clusterName = getClusterName(cluster, clusterIndex);
             const clusterCode = getClusterCode(clusterIndex);
@@ -228,39 +292,39 @@ export function CCPCDocumentMode({
             return (
                 <div
                     key={`cluster-${clusterIndex}-${cluster.id ?? clusterCode}`}
-                    className="grid grid-cols-[210px_1fr] gap-5"
+                    className="grid grid-cols-[32mm_1fr] gap-[4mm]"
               >
-                <div className="flex h-[150px] flex-col border border-black">
+                <div className="flex h-[22mm] flex-col border border-black">
                   <div className="flex flex-1 items-center justify-center bg-[#d9d9d9] px-3 text-center uppercase leading-tight">
                     {clusterName}
                   </div>
-                  <div className="bg-[#20a79a] py-2 text-center font-normal">
+                  <div className="bg-[#20a79a] py-1 text-center font-normal">
                     {clusterCode}
                   </div>
                 </div>
 
-                <div className="grid grid-cols-4 gap-5">
+                <div className="grid grid-cols-4 gap-[4mm]">
                   {items.length > 0 ? (
                     items.map((item, itemIndex) => (
                       <div
                         key={`${cluster.id}-${itemIndex}`}
-                        className="flex h-[150px] flex-col border border-black"
+                        className="flex h-[22mm] flex-col border border-black"
                       >
                         <div className="flex flex-1 items-center justify-center px-3 text-center uppercase leading-tight">
                           {item}
                         </div>
-                        <div className="border-t border-black py-2 text-center">
+                        <div className="border-t border-black py-1 text-center">
                           {clusterCode}- WA
                           {String(itemIndex + 1).padStart(2, "0")}
                         </div>
                       </div>
                     ))
                   ) : (
-                    <div className="flex h-[150px] flex-col border border-black">
+                    <div className="flex h-[22mm] flex-col border border-black">
                       <div className="flex flex-1 items-center justify-center px-3 text-center uppercase leading-tight text-slate-400">
                         NO WORK ACTIVITY
                       </div>
-                      <div className="border-t border-black py-2 text-center">
+                      <div className="border-t border-black py-1 text-center">
                         {clusterCode}- WA01
                       </div>
                     </div>
@@ -274,6 +338,7 @@ export function CCPCDocumentMode({
           </div>
         );
       })}
+      </div>
     </div>
   );
 }

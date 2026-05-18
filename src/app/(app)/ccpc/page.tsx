@@ -468,6 +468,17 @@ function CCPCPageContent() {
         : null,
     [aiClusterResult, displayClusters]
   );
+  const documentClusters = useMemo(() => {
+    const sourceClusters = displayClusters as CCPCSummaryCluster[];
+
+    if (selectedDocumentKeys.length === 0) {
+      return sourceClusters;
+    }
+
+    return sourceClusters.filter((cluster) =>
+      selectedDocumentKeys.includes(getTargetKey(cluster.target))
+    );
+  }, [displayClusters, selectedDocumentKeys]);
 
   async function loadCCPCClusters() {
     if (!sessionName) return;
@@ -1160,7 +1171,7 @@ function CCPCPageContent() {
 
         {viewMode === "document" ? (
           <CCPCDocumentMode
-            clusters={displayClusters}
+            clusters={documentClusters}
             section={projectInfo.sector}
             group={projectInfo.bidang}
             area={projectInfo.laluanKerjaya}
