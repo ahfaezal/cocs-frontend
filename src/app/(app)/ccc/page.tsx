@@ -577,11 +577,6 @@ function CCCDocumentMode({
               const cccUnit = normalizeCCCUnitProfile(
                 cccProfile.units[unit.unitCode]
               );
-              const ase = [
-                ...cccUnit.attitude,
-                ...cccUnit.safety,
-                ...cccUnit.environment,
-              ];
 
               return (
                 <tr key={unit.unitCode}>
@@ -605,8 +600,19 @@ function CCCDocumentMode({
                     />
                   </td>
                   <td className="border border-black px-3 py-3 align-top">
-                    <DocumentLineList
-                      lines={formatDocumentLines(ase, unitIndex + 1)}
+                    <DocumentAseList
+                      attitude={formatDocumentLines(
+                        cccUnit.attitude,
+                        unitIndex + 1
+                      )}
+                      safety={formatDocumentLines(
+                        cccUnit.safety,
+                        unitIndex + 1
+                      )}
+                      environment={formatDocumentLines(
+                        cccUnit.environment,
+                        unitIndex + 1
+                      )}
                     />
                   </td>
                 </tr>
@@ -615,6 +621,37 @@ function CCCDocumentMode({
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+function DocumentAseList({
+  attitude,
+  safety,
+  environment,
+}: {
+  attitude: Array<{ number: string; text: string }>;
+  safety: Array<{ number: string; text: string }>;
+  environment: Array<{ number: string; text: string }>;
+}) {
+  const sections = [
+    { title: "ATTITUDE", lines: attitude },
+    { title: "SAFETY", lines: safety },
+    { title: "ENVIRONMENT", lines: environment },
+  ];
+
+  if (sections.every((section) => section.lines.length === 0)) return <>-</>;
+
+  return (
+    <div className="space-y-4">
+      {sections.map((section) => (
+        <div key={section.title}>
+          <div className="mb-1 font-bold uppercase underline">
+            {section.title}
+          </div>
+          <DocumentLineList lines={section.lines} />
+        </div>
+      ))}
     </div>
   );
 }
