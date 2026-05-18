@@ -456,7 +456,9 @@ function stringifyDevelopmentCommittee(data: StandardDevelopmentCommittee) {
 }
 
 function buildDevelopmentCommitteeFromMembers(
-  members: CommitteeMember[]
+  members: CommitteeMember[],
+  facilitators: CommitteeMember[] = [],
+  current?: StandardDevelopmentCommittee
 ): StandardDevelopmentCommittee {
   return {
     committee:
@@ -465,9 +467,15 @@ function buildDevelopmentCommitteeFromMembers(
             left: member.name,
             right: `${member.organization} - ${member.role}`,
           }))
-        : createEmptyCommitteeRows(1),
-    secretariat: createEmptyCommitteeRows(1),
-    facilitator: createEmptyCommitteeRows(1),
+        : current?.committee || createEmptyCommitteeRows(1),
+    secretariat: current?.secretariat || createEmptyCommitteeRows(1),
+    facilitator:
+      facilitators.length > 0
+        ? facilitators.map((member) => ({
+            left: member.name,
+            right: `${member.organization} - ${member.role}`,
+          }))
+        : current?.facilitator || createEmptyCommitteeRows(1),
   };
 }
 
@@ -1270,27 +1278,38 @@ function CSPTermTableEditor({
 function CSPDevelopmentCommitteeEditor({
   content,
   defaultCommitteeMembers,
+  defaultFacilitators,
   onContentChange,
 }: {
   content?: string;
   defaultCommitteeMembers?: CommitteeMember[];
+  defaultFacilitators?: CommitteeMember[];
   onContentChange: (content: string) => void;
 }) {
-  const hasSavedContent = Boolean(content?.trim());
-  const data =
-    !hasSavedContent && defaultCommitteeMembers && defaultCommitteeMembers.length > 0
-      ? buildDevelopmentCommitteeFromMembers(defaultCommitteeMembers)
-      : parseDevelopmentCommittee(content);
+  const panelMembers = defaultCommitteeMembers || [];
+  const facilitators = defaultFacilitators || [];
+  const currentData = useMemo(() => parseDevelopmentCommittee(content), [content]);
+  const hasAutoCommitteeData = panelMembers.length > 0 || facilitators.length > 0;
+  const data = useMemo(
+    () =>
+      hasAutoCommitteeData
+        ? buildDevelopmentCommitteeFromMembers(
+            panelMembers,
+            facilitators,
+            currentData
+          )
+        : currentData,
+    [currentData, facilitators, hasAutoCommitteeData, panelMembers]
+  );
 
   useEffect(() => {
-    if (!hasSavedContent && defaultCommitteeMembers && defaultCommitteeMembers.length > 0) {
-      onContentChange(
-        stringifyDevelopmentCommittee(
-          buildDevelopmentCommitteeFromMembers(defaultCommitteeMembers)
-        )
-      );
+    if (!hasAutoCommitteeData) return;
+
+    const nextContent = stringifyDevelopmentCommittee(data);
+    if (nextContent !== content) {
+      onContentChange(nextContent);
     }
-  }, [defaultCommitteeMembers, hasSavedContent, onContentChange]);
+  }, [content, data, hasAutoCommitteeData, onContentChange]);
 
   function updateGroup(
     group: keyof StandardDevelopmentCommittee,
@@ -1552,6 +1571,9 @@ function CSPPageContent() {
   const [committeeMembers, setCommitteeMembers] = useState<CommitteeMember[]>(
     []
   );
+  const [facilitatorMembers, setFacilitatorMembers] = useState<
+    CommitteeMember[]
+  >([]);
   const [projectInfo, setProjectInfo] = useState<ProjectInfo>({
     id: "",
     code: "-",
@@ -1881,6 +1903,68 @@ function CSPPageContent() {
     loadCommitteeMembers();
   }, [sessionName]);
 
+  useEffect(() => {
+    if (!projectId) {
+      queueMicrotask(() => setFacilitatorMembers([]));
+      return;
+    }
+
+    async function loadFacilitators() {
+      const token = getAuthToken();
+      const headers = {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
+
+      try {
+        const [assignmentsRes, usersRes] = await Promise.all([
+          fetch(`${API_URL}/project-assignments/project/${projectId}`, {
+            cache: "no-store",
+            headers,
+          }),
+          fetch(`${API_URL}/users/`, {
+            cache: "no-store",
+            headers,
+          }),
+        ]);
+
+        if (!assignmentsRes.ok || !usersRes.ok) {
+          setFacilitatorMembers([]);
+          return;
+        }
+
+        const assignments = (await assignmentsRes.json()) as ProjectAssignment[];
+        const users = (await usersRes.json()) as UserSummary[];
+        const userMap = new Map(users.map((user) => [String(user.id), user]));
+
+        const facilitators = assignments
+          .filter(
+            (assignment) =>
+              assignment.assignment_role === "FACILITATOR" &&
+              String(assignment.status || "ACTIVE").toUpperCase() === "ACTIVE"
+          )
+          .map((assignment) => {
+            const user = userMap.get(String(assignment.user_id));
+
+            if (!user?.name) return null;
+
+            return {
+              name: user.name,
+              organization: user.organization || "-",
+              role: "Facilitator",
+            };
+          })
+          .filter((item): item is CommitteeMember => Boolean(item));
+
+        setFacilitatorMembers(facilitators);
+      } catch (error) {
+        console.error("Gagal load fasilitator CSP:", error);
+        setFacilitatorMembers([]);
+      }
+    }
+
+    loadFacilitators();
+  }, [projectId]);
+
   return (
     <div className="space-y-6">
       <div className="rounded-2xl border border-slate-200 bg-white px-6 py-4 shadow-sm">
@@ -2018,6 +2102,7 @@ function CSPPageContent() {
                 <CSPDevelopmentCommitteeEditor
                   content={cspSections["7"]}
                   defaultCommitteeMembers={committeeMembers}
+                  defaultFacilitators={facilitatorMembers}
                   onContentChange={(content) =>
                     updateCSPSection("7", content)
                   }
