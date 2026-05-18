@@ -311,11 +311,51 @@ function normalizeCCCUnitProfile(profile?: Partial<CCCUnitProfile>): CCCUnitProf
 }
 
 function defaultLearningOutcome(competency: Competency) {
-  const units = competency.units
-    .map((unit) => unit.unitTitle.toLowerCase())
-    .join(", ");
+  const unitTitles = competency.units
+    .map((unit) => unit.unitTitle)
+    .filter(Boolean);
+  const scope = unitTitles.map((unit) => unit.toLowerCase()).join(", ");
+  const numberedUnits = unitTitles
+    .map((unit, index) => `${index + 1}. ${unit}.`)
+    .join("\n");
 
-  return `Upon completion of this competency, the participant shall be able to perform ${competency.title.toLowerCase()} including ${units}.`;
+  return `The learning outcomes of this competency are to enable the trainees to perform ${competency.title.toLowerCase()} by applying ${scope} in accordance with established industry guidelines, work procedures, and safety requirements.
+
+Upon completion of this competency, trainees should be able to:
+${numberedUnits}`;
+}
+
+function formatLearningOutcomeFromAI(items: string[], competency: Competency) {
+  const cleaned = items.map(cleanText).filter(Boolean);
+
+  if (cleaned.length === 0) return defaultLearningOutcome(competency);
+
+  return cleaned.join("\n");
+}
+
+function buildKnowledgePlaceholder(workSteps: string[]) {
+  const firstStep = cleanText(workSteps[0]) || "Laksana langkah kerja";
+  const secondStep = cleanText(workSteps[1]) || "Semak hasil kerja";
+
+  return `1.1 Informasi, keperluan kerja, peralatan dan bahan untuk ${firstStep}
+  - Standard kerja berkaitan
+  - Peralatan dan bahan yang diperlukan
+1.2 Informasi, prosedur dan kriteria kualiti untuk ${secondStep}`;
+}
+
+function getAsePlaceholder(type: "attitude" | "safety" | "environment") {
+  if (type === "attitude") {
+    return `1.1 Bergaul baik dengan rakan sekerja dan bekerjasama dalam aktiviti kerja.
+1.2 Teliti dalam membuat keputusan, jujur, berintegriti, tepat masa dan berdisiplin.`;
+  }
+
+  if (type === "safety") {
+    return `1.1 Berhati-hati dalam mengendalikan bahan, peralatan dan kawasan kerja berisiko.
+1.2 Gunakan PPE, papan tanda keselamatan dan kaedah kerja selamat.`;
+  }
+
+  return `1.1 Patuhi konsep 3R (reuse, reduce & recycle) semasa aktiviti kerja.
+1.2 Elakkan pencemaran alam sekitar dan urus sisa kerja dengan selamat.`;
 }
 
 function normalizeCCCCompetencyProfile(
@@ -983,6 +1023,10 @@ function CCCPageContent() {
           competencyTitle: unit.competencyTitle,
           cuTitle: unit.unitTitle,
           workStepTitle: ccpUnit.workSteps.filter(Boolean).join("; "),
+          workSteps: ccpUnit.workSteps.filter(Boolean),
+          competencyUnits:
+            selectedCompetency?.units.map((competencyUnit) => competencyUnit.unitTitle) ??
+            [unit.unitTitle],
           performanceCriteriaTexts: ccpUnit.performanceCriteria.filter(Boolean),
         }),
       });
@@ -998,10 +1042,12 @@ function CCCPageContent() {
       const attitude = normalizeList(generated.attitudeItems);
       const safety = normalizeList(generated.safetyItems);
       const environment = normalizeList(generated.environmentItems);
-      const learningOutcome = generated.learningOutcomes
-        ?.map(cleanText)
-        .filter(Boolean)
-        .join("\n");
+      const learningOutcome = selectedCompetency
+        ? formatLearningOutcomeFromAI(
+            generated.learningOutcomes ?? [],
+            selectedCompetency
+          )
+        : "";
 
       markUnitDirty(unit.competencyCode, unit.unitCode);
 
@@ -1009,11 +1055,7 @@ function CCCPageContent() {
         buildNextProfile(unit.competencyCode, (profile) => ({
           ...markProfileUnsaved(profile),
           learningOutcomeIntro:
-            learningOutcome || profile.learningOutcomeIntro || defaultLearningOutcome({
-              code: unit.competencyCode,
-              title: unit.competencyTitle,
-              units: [unit],
-            }),
+            learningOutcome || profile.learningOutcomeIntro,
           units: {
             ...profile.units,
             [unit.unitCode]: normalizeCCCUnitProfile({
@@ -1478,14 +1520,28 @@ function CCCPageContent() {
                         LEARNING OUTCOMES
                       </th>
                       <td className="border border-slate-300 px-4 py-3">
+                        <div className="mb-3 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-800">
+                          Kekalkan ayat pembuka:{" "}
+                          <span className="font-bold">
+                            The learning outcomes of this competency are to enable
+                            the trainees to
+                          </span>
+                          . Senarai selepas ayat "Upon completion..." diambil
+                          daripada semua Competency Unit di bawah Core Competency
+                          ini.
+                        </div>
                         <textarea
                           value={selectedCCCProfile?.learningOutcomeIntro || ""}
                           onChange={(event) =>
                             updateLearningOutcome(event.target.value)
                           }
-                          rows={4}
+                          rows={8}
                           className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm leading-6 text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                          placeholder="Learning Outcomes untuk Core Competency ini."
+                          placeholder={`The learning outcomes of this competency are to enable the trainees to ...
+
+Upon completion of this competency, trainees should be able to:
+1. ${selectedCompetency?.units[0]?.unitTitle || "Competency Unit 1"}.
+2. ${selectedCompetency?.units[1]?.unitTitle || "Competency Unit 2"}.`}
                         />
                       </td>
                     </tr>
@@ -1556,6 +1612,11 @@ function CCCPageContent() {
                             </div>
                           </td>
                           <td className="border border-slate-300 px-4 py-3 align-top">
+                            <p className="mb-2 text-xs leading-5 text-slate-500">
+                              Knowledge mesti 1:1 dengan Work Step. Jika Work Step
+                              ada 1.1 hingga 1.5, Knowledge juga perlu ada 1.1
+                              hingga 1.5 dan boleh tambah bullet di bawah ayat.
+                            </p>
                             <textarea
                               value={cccUnit.knowledge.join("\n")}
                               onChange={(event) =>
@@ -1567,7 +1628,7 @@ function CCCPageContent() {
                               }
                               rows={8}
                               className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm leading-6 outline-none focus:border-blue-500"
-                              placeholder="Jana atau masukkan Knowledge..."
+                              placeholder={buildKnowledgePlaceholder(ccpUnit.workSteps)}
                             />
                           </td>
                           <td className="border border-slate-300 px-4 py-3 align-top">
@@ -1592,6 +1653,13 @@ function CCCPageContent() {
                           </td>
                           <td className="border border-slate-300 px-4 py-3 align-top">
                             <div className="space-y-3">
+                              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">
+                                <span className="font-bold text-slate-800">
+                                  ATTITUDE
+                                </span>{" "}
+                                merangkumi disiplin, kerjasama, integriti, 5S,
+                                toleransi, ketepatan masa dan etika kerja.
+                              </div>
                               <textarea
                                 value={cccUnit.attitude.join("\n")}
                                 onChange={(event) =>
@@ -1603,8 +1671,16 @@ function CCCPageContent() {
                                 }
                                 rows={3}
                                 className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm leading-6 outline-none focus:border-blue-500"
-                                placeholder="Attitude..."
+                                placeholder={getAsePlaceholder("attitude")}
                               />
+                              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">
+                                <span className="font-bold text-slate-800">
+                                  SAFETY
+                                </span>{" "}
+                                menerangkan langkah melindungi pekerja, operasi,
+                                peralatan dan persekitaran kerja daripada bahaya,
+                                risiko atau kemalangan.
+                              </div>
                               <textarea
                                 value={cccUnit.safety.join("\n")}
                                 onChange={(event) =>
@@ -1616,8 +1692,16 @@ function CCCPageContent() {
                                 }
                                 rows={3}
                                 className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm leading-6 outline-none focus:border-blue-500"
-                                placeholder="Safety..."
+                                placeholder={getAsePlaceholder("safety")}
                               />
+                              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">
+                                <span className="font-bold text-slate-800">
+                                  ENVIRONMENT
+                                </span>{" "}
+                                menerangkan kawalan pencemaran, pengurusan sisa,
+                                3R dan langkah memelihara alam sekitar semasa
+                                kerja dijalankan.
+                              </div>
                               <textarea
                                 value={cccUnit.environment.join("\n")}
                                 onChange={(event) =>
@@ -1629,7 +1713,7 @@ function CCCPageContent() {
                                 }
                                 rows={3}
                                 className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm leading-6 outline-none focus:border-blue-500"
-                                placeholder="Environment..."
+                                placeholder={getAsePlaceholder("environment")}
                               />
                             </div>
                           </td>

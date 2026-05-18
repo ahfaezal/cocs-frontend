@@ -10,59 +10,109 @@ function toLowerPhrase(text: string): string {
   return text.trim().replace(/[.!?]$/, "").toLowerCase();
 }
 
-function buildLearningOutcomes(cuTitle: string, workStepTitle: string, pcs: string[]) {
-  const cu = toLowerPhrase(cuTitle);
-  const ws = toLowerPhrase(workStepTitle);
+function stripNumberPrefix(text: string): string {
+  return text.trim().replace(/^\d+(?:\.\d+)*\.?\s*/, "").trim();
+}
+
+function normalizeWorkSteps(workStepTitle: string, workSteps: unknown) {
+  const rawItems = Array.isArray(workSteps)
+    ? workSteps
+    : String(workStepTitle || "")
+        .split(/;|\r?\n/)
+        .map((item) => item.trim());
+
+  return rawItems
+    .map((item) => String(item ?? "").trim())
+    .filter(Boolean)
+    .map((item, index) => {
+      const match = item.match(/^(\d+(?:\.\d+)*\.?)\s*(.*)$/);
+      const number = match?.[1]?.replace(/\.$/, "") || `1.${index + 1}`;
+      const text = match?.[2] || item;
+
+      return {
+        number,
+        text: stripNumberPrefix(text),
+      };
+    });
+}
+
+function normalizeCompetencyUnits(items: unknown) {
+  if (!Array.isArray(items)) return [];
+
+  return items
+    .map((item) => String(item ?? "").trim())
+    .filter(Boolean);
+}
+
+function formatNumbered(number: string, text: string) {
+  return `${number} ${normalizeSentence(text)}`;
+}
+
+function buildLearningOutcomes(
+  competencyTitle: string,
+  cuTitle: string,
+  competencyUnits: string[]
+) {
+  const units = competencyUnits.length > 0 ? competencyUnits : [cuTitle];
+  const scope = units.map((unit) => toLowerPhrase(unit)).join(", ");
 
   return [
-    `Describe the purpose and requirements to ${cu} in accordance with workplace procedures.`,
-    `Perform ${ws} according to the required method, safety requirement, and quality standard.`,
-    `Demonstrate compliance with the related performance criteria during task execution.`,
+    `The learning outcomes of this competency are to enable the trainees to perform ${toLowerPhrase(
+      competencyTitle || cuTitle
+    )} by applying ${scope} in accordance with established industry guidelines, work procedures, and safety requirements.`,
+    "",
+    "Upon completion of this competency, trainees should be able to:",
+    ...units.map((unit, index) => `${index + 1}. ${normalizeSentence(unit)}`),
   ];
 }
 
-function buildKnowledge(cuTitle: string, workStepTitle: string, pcs: string[]) {
+function buildKnowledge(
+  cuTitle: string,
+  workSteps: Array<{ number: string; text: string }>
+) {
   const cu = toLowerPhrase(cuTitle);
-  const ws = toLowerPhrase(workStepTitle);
 
-  const base = [
-    `Introduction to ${cu}.`,
-    `Tools, materials, equipment, and relevant operational requirements for ${cu}.`,
-    `Applicable safety precautions, quality requirements, and work standards related to ${ws}.`,
-  ];
-
-  const pcBased = pcs.slice(0, 3).map(
-    (pc) => `Knowledge related to ${toLowerPhrase(pc)}.`
+  return workSteps.map((step) =>
+    formatNumbered(
+      step.number,
+      `Information, tools, materials, equipment, operational requirements, and work standards required to ${toLowerPhrase(
+        step.text
+      )} for ${cu}`
+    )
   );
-
-  return [...base, ...pcBased];
 }
 
-function buildAttitude(workStepTitle: string) {
-  const ws = toLowerPhrase(workStepTitle);
-
-  return [
-    `Demonstrate responsibility in carrying out ${ws}.`,
-    `Maintain work discipline and follow instructions during task execution.`,
-  ];
+function buildAttitude(workSteps: Array<{ number: string; text: string }>) {
+  return workSteps.slice(0, 3).map((step) =>
+    formatNumbered(
+      step.number,
+      `Demonstrate discipline, cooperation, punctuality, integrity, tolerance, and responsibility when carrying out ${toLowerPhrase(
+        step.text
+      )}`
+    )
+  );
 }
 
-function buildSafety(workStepTitle: string) {
-  const ws = toLowerPhrase(workStepTitle);
-
-  return [
-    `Comply with all safety requirements and wear appropriate PPE during ${ws}.`,
-    `Ensure tools, materials, and work area are handled safely at all times.`,
-  ];
+function buildSafety(workSteps: Array<{ number: string; text: string }>) {
+  return workSteps.slice(0, 3).map((step) =>
+    formatNumbered(
+      step.number,
+      `Apply appropriate safety precautions, PPE, equipment inspection, warning signage, and hazard control when performing ${toLowerPhrase(
+        step.text
+      )}`
+    )
+  );
 }
 
-function buildEnvironment(workStepTitle: string) {
-  const ws = toLowerPhrase(workStepTitle);
-
-  return [
-    `Maintain cleanliness of the work area throughout ${ws}.`,
-    `Dispose of waste materials according to environmental requirements.`,
-  ];
+function buildEnvironment(workSteps: Array<{ number: string; text: string }>) {
+  return workSteps.slice(0, 3).map((step) =>
+    formatNumbered(
+      step.number,
+      `Protect the work environment by maintaining cleanliness, applying 3R practices, preventing pollution, and managing waste properly while carrying out ${toLowerPhrase(
+        step.text
+      )}`
+    )
+  );
 }
 
 export async function POST(req: NextRequest) {
@@ -70,41 +120,33 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
 
     const {
-      competencyTitle,
+      competencyTitle = "",
       cuTitle,
-      workStepTitle,
-      performanceCriteriaTexts = [],
+      workStepTitle = "",
+      workSteps,
+      competencyUnits = [],
     } = body;
 
-    if (!cuTitle || !workStepTitle) {
+    const normalizedWorkSteps = normalizeWorkSteps(workStepTitle, workSteps);
+    const normalizedCompetencyUnits = normalizeCompetencyUnits(competencyUnits);
+
+    if (!cuTitle || normalizedWorkSteps.length === 0) {
       return NextResponse.json(
-        { error: "cuTitle and workStepTitle are required" },
+        { error: "cuTitle and at least one work step are required" },
         { status: 400 }
       );
     }
 
-    const learningOutcomes = buildLearningOutcomes(
-      cuTitle,
-      workStepTitle,
-      performanceCriteriaTexts
-    ).map(normalizeSentence);
-
-    const knowledgeItems = buildKnowledge(
-      cuTitle,
-      workStepTitle,
-      performanceCriteriaTexts
-    ).map(normalizeSentence);
-
-    const attitudeItems = buildAttitude(workStepTitle).map(normalizeSentence);
-    const safetyItems = buildSafety(workStepTitle).map(normalizeSentence);
-    const environmentItems = buildEnvironment(workStepTitle).map(normalizeSentence);
-
     return NextResponse.json({
-      learningOutcomes,
-      knowledgeItems,
-      attitudeItems,
-      safetyItems,
-      environmentItems,
+      learningOutcomes: buildLearningOutcomes(
+        competencyTitle,
+        cuTitle,
+        normalizedCompetencyUnits
+      ),
+      knowledgeItems: buildKnowledge(cuTitle, normalizedWorkSteps),
+      attitudeItems: buildAttitude(normalizedWorkSteps),
+      safetyItems: buildSafety(normalizedWorkSteps),
+      environmentItems: buildEnvironment(normalizedWorkSteps),
       assessmentMethods: ["Observation", "Practical Test"],
       trainingHours: 1,
     });
