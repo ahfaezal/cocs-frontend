@@ -152,6 +152,25 @@ function splitMultiline(value: string) {
   return lines.length > 0 ? lines : [""];
 }
 
+function splitEditableMultiline(value: string) {
+  const lines = value.split(/\r?\n/);
+
+  return lines.length > 0 ? lines : [""];
+}
+
+function splitNumberedLine(value: string) {
+  const match = cleanText(value).match(/^(\d+(?:\.\d+)*\.?)\s*(.*)$/);
+
+  if (!match) {
+    return { number: "", text: cleanText(value) };
+  }
+
+  return {
+    number: match[1],
+    text: match[2],
+  };
+}
+
 function normalizeUnitProfile(profile?: Partial<CCPUnitProfile>): CCPUnitProfile {
   return {
     workSteps: normalizeList(profile?.workSteps),
@@ -490,13 +509,23 @@ function CCPDocumentMode({
                     <div className="mt-2 text-xs">{unit.unitCode}</div>
                   </td>
                   <td className="border border-black px-3 py-3 align-top">
-                    {unitProfile.workSteps.some(Boolean) ? (
+                    {unitProfile.workSteps.some((item) => item.trim()) ? (
                       <div className="space-y-1">
                         {unitProfile.workSteps
-                          .filter(Boolean)
-                          .map((item, index) => (
-                            <div key={`${unit.unitCode}-ws-${index}`}>{item}</div>
-                          ))}
+                          .filter((item) => item.trim())
+                          .map((item, index) => {
+                            const line = splitNumberedLine(item);
+
+                            return (
+                              <div
+                                key={`${unit.unitCode}-ws-${index}`}
+                                className="grid grid-cols-[3rem_minmax(0,1fr)] gap-2 leading-6"
+                              >
+                                <span className="tabular-nums">{line.number}</span>
+                                <span className="text-justify">{line.text}</span>
+                              </div>
+                            );
+                          })}
                       </div>
                     ) : (
                       "-"
@@ -504,13 +533,23 @@ function CCPDocumentMode({
                   </td>
 
                   <td className="border border-black px-3 py-3 align-top">
-                    {unitProfile.performanceCriteria.some(Boolean) ? (
+                    {unitProfile.performanceCriteria.some((item) => item.trim()) ? (
                       <div className="space-y-1">
                         {unitProfile.performanceCriteria
-                          .filter(Boolean)
-                          .map((item, index) => (
-                            <div key={`${unit.unitCode}-pc-${index}`}>{item}</div>
-                          ))}
+                          .filter((item) => item.trim())
+                          .map((item, index) => {
+                            const line = splitNumberedLine(item);
+
+                            return (
+                              <div
+                                key={`${unit.unitCode}-pc-${index}`}
+                                className="grid grid-cols-[3rem_minmax(0,1fr)] gap-2 leading-6"
+                              >
+                                <span className="tabular-nums">{line.number}</span>
+                                <span className="text-justify">{line.text}</span>
+                              </div>
+                            );
+                          })}
                       </div>
                     ) : (
                       "-"
@@ -813,7 +852,7 @@ function CCPPageContent() {
           ...profile.units,
           [unitCode]: {
             ...normalizeUnitProfile(profile.units[unitCode]),
-            workSteps: splitMultiline(value),
+            workSteps: splitEditableMultiline(value),
           },
         },
       }))
@@ -832,7 +871,7 @@ function CCPPageContent() {
           ...profile.units,
           [unitCode]: {
             ...normalizeUnitProfile(profile.units[unitCode]),
-            performanceCriteria: splitMultiline(value),
+            performanceCriteria: splitEditableMultiline(value),
           },
         },
       }))
