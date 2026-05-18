@@ -1,6 +1,5 @@
 ﻿"use client";
 
-import Link from "next/link";
 import { ExternalLink } from "lucide-react";
 
 type LiveBoardToolbarProps = {
@@ -19,6 +18,7 @@ export function LiveBoardToolbar({
         sessionId
       )}&projectId=${encodeURIComponent(projectId)}`
     : `/ccpc/live-board?sessionId=${encodeURIComponent(sessionId)}`;
+  const canOpenLiveBoard = Boolean(sessionId);
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
@@ -47,13 +47,27 @@ export function LiveBoardToolbar({
 
         {!readOnly ? (
           <div className="flex flex-wrap items-center gap-3">
-            <Link
-              href={liveBoardHref}
-              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
-            >
-              <ExternalLink size={16} />
-              Buka Live Board
-            </Link>
+            {canOpenLiveBoard ? (
+              <a
+                href={liveBoardHref}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
+              >
+                <ExternalLink size={16} />
+                Buka Live Board
+              </a>
+            ) : (
+              <button
+                type="button"
+                disabled
+                className="inline-flex cursor-not-allowed items-center gap-2 rounded-xl bg-slate-300 px-4 py-2.5 text-sm font-semibold text-white"
+                title="Session Live Board sedang dimuatkan."
+              >
+                <ExternalLink size={16} />
+                Memuatkan Live Board
+              </button>
+            )}
           </div>
         ) : null}
       </div>
