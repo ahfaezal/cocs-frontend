@@ -1,9 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
 
 import { sidebarMenu } from "@/data/menu";
+import {
+  buildProjectHref,
+  getActiveProjectId,
+  isProjectWorkflowPath,
+  setActiveProjectId,
+} from "@/lib/active-project";
 import { hasAnyPermission } from "@/lib/permissions";
 import { useCurrentUser } from "@/lib/use-current-user";
 
@@ -15,7 +22,18 @@ function matchesPath(pathname: string, href: string) {
 
 export function Sidebar() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const currentUser = useCurrentUser();
+  const [activeProjectId, setActiveProjectIdState] = useState("");
+
+  useEffect(() => {
+    const projectId = searchParams.get("projectId") || getActiveProjectId();
+
+    if (!projectId) return;
+
+    setActiveProjectId(projectId);
+    setActiveProjectIdState(projectId);
+  }, [searchParams]);
 
   const visibleSections = sidebarMenu
     .map((section) => ({
@@ -54,11 +72,14 @@ export function Sidebar() {
               {section.items.map((item) => {
                 const Icon = item.icon;
                 const active = activeHref === item.href;
+                const href = isProjectWorkflowPath(item.href)
+                  ? buildProjectHref(item.href, activeProjectId)
+                  : item.href;
 
                 return (
                   <Link
                     key={item.href}
-                    href={item.href}
+                    href={href}
                     className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200 ${
                       active
                         ? "bg-blue-600 text-white shadow-md"

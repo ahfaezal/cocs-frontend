@@ -9,6 +9,7 @@ import {
   ClipboardCheck,
   Archive,
   ArrowRight,
+  History,
 } from "lucide-react";
 
 import { PageHeader } from "@/components/shared/page-header";
@@ -20,6 +21,7 @@ import { hasPermission } from "@/lib/permissions";
 import { useCurrentUser } from "@/lib/use-current-user";
 import type { ProjectStatus } from "@/types/project";
 import { getAuthToken } from "@/lib/auth";
+import { getLastWorkPage } from "@/lib/active-project";
 
 type ProjectItem = {
   id: number | string;
@@ -69,6 +71,7 @@ export default function DashboardPage() {
   );
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
+  const [lastWorkPage, setLastWorkPage] = useState("");
   const currentUser = useCurrentUser();
 
   async function loadProjects() {
@@ -108,6 +111,10 @@ export default function DashboardPage() {
     loadProjects();
   }, [currentUser.id, currentUser.role]);
 
+  useEffect(() => {
+    setLastWorkPage(getLastWorkPage());
+  }, []);
+
   const totalProjects = projects.length;
 
   const inProgress = projects.filter((item) =>
@@ -139,6 +146,16 @@ export default function DashboardPage() {
         }
         action={
           <div className="flex items-center gap-3">
+            {lastWorkPage ? (
+              <Link
+                href={lastWorkPage}
+                className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-5 py-3 font-semibold text-blue-700 transition hover:bg-blue-100"
+              >
+                <History size={16} />
+                Sambung Kerja Terakhir
+              </Link>
+            ) : null}
+
             <Link
               href="/projects"
               className="rounded-xl border border-slate-200 bg-white px-5 py-3 font-medium text-slate-700 transition hover:bg-slate-50"
