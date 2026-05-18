@@ -1455,6 +1455,39 @@ async function generateDescriptor() {
                   </tbody>
                 </table>
               </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4">
+                <div>
+                  <p className="text-sm font-bold text-slate-800">
+                    {selectedCompetency?.code || "-"} - Save Core Competency
+                  </p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {selectedCompetencySaved
+                      ? "Core Competency ini telah disimpan dan boleh diteruskan."
+                      : selectedCompetencyComplete
+                        ? "Semua maklumat lengkap. Klik Save untuk sahkan Core Competency ini."
+                        : "Lengkapkan Descriptor, Work Step dan Performance Criteria sebelum Save."}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={saveSelectedCompetency}
+                  disabled={
+                    !selectedCompetencyComplete ||
+                    selectedCompetencySaved ||
+                    savingCompetencyCode === selectedCompetency?.code
+                  }
+                  className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                >
+                  <Save size={16} />
+                  {savingCompetencyCode === selectedCompetency?.code
+                    ? "Menyimpan..."
+                    : selectedCompetencySaved
+                      ? "Telah Disimpan"
+                      : "Save Core Competency"}
+                </button>
+              </div>
             </div>
           </div>
         </div>
