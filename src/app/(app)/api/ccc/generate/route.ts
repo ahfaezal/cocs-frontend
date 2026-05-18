@@ -73,6 +73,29 @@ function formatNumbered(number: string, text: string) {
   return `${number} ${normalizeSentence(text)}`;
 }
 
+function getUnitPrefix(workSteps: WorkStep[]) {
+  const firstNumber = workSteps[0]?.number || "1.1";
+  return firstNumber.split(".")[0] || "1";
+}
+
+function renumberWithPrefix(items: string[], prefix: string) {
+  return items
+    .map((item) => stripNumberPrefix(item))
+    .filter(Boolean)
+    .map((item, index) => formatNumbered(`${prefix}.${index + 1}`, item));
+}
+
+function renumberWithWorkSteps(items: string[], workSteps: WorkStep[]) {
+  return items
+    .map((item, index) => {
+      const text = stripNumberPrefix(item);
+      const number = workSteps[index]?.number || `${getUnitPrefix(workSteps)}.${index + 1}`;
+
+      return text ? formatNumbered(number, text) : "";
+    })
+    .filter(Boolean);
+}
+
 function buildLearningOutcomes(
   competencyTitle: string,
   cuTitle: string,
@@ -115,14 +138,15 @@ function buildKnowledge(
 function buildAttitude(cuTitle: string, workSteps: WorkStep[]) {
   const cu = toLowerPhrase(cuTitle);
   const stepScope = workSteps.map((step) => toLowerPhrase(step.text)).join(", ");
+  const prefix = getUnitPrefix(workSteps);
 
   return [
     formatNumbered(
-      "1.1",
+      `${prefix}.1`,
       `Demonstrate discipline, integrity, punctuality, cooperation, tolerance, and careful judgement while performing ${cu}`
     ),
     formatNumbered(
-      "1.2",
+      `${prefix}.2`,
       `Communicate clearly, follow work instructions, practise 5S, and maintain professional conduct during ${stepScope}`
     ),
   ];
@@ -130,6 +154,7 @@ function buildAttitude(cuTitle: string, workSteps: WorkStep[]) {
 
 function buildSafety(cuTitle: string, workSteps: WorkStep[]) {
   const cu = toLowerPhrase(cuTitle);
+  const prefix = getUnitPrefix(workSteps);
   const criticalSteps = workSteps
     .slice(0, 3)
     .map((step) => toLowerPhrase(step.text))
@@ -137,26 +162,27 @@ function buildSafety(cuTitle: string, workSteps: WorkStep[]) {
 
   return [
     formatNumbered(
-      "1.1",
+      `${prefix}.1`,
       `Wear suitable PPE, verify tools and equipment are serviceable, and secure the work area before performing ${cu}`
     ),
     formatNumbered(
-      "1.2",
+      `${prefix}.2`,
       `Control hazards related to ${criticalSteps}, including unsafe movement, incorrect tools, electrical exposure, poor signage, and other operational risks`
     ),
   ];
 }
 
-function buildEnvironment(cuTitle: string) {
+function buildEnvironment(cuTitle: string, workSteps: WorkStep[]) {
   const cu = toLowerPhrase(cuTitle);
+  const prefix = getUnitPrefix(workSteps);
 
   return [
     formatNumbered(
-      "1.1",
+      `${prefix}.1`,
       `Maintain cleanliness, apply 3R practices, and segregate waste materials properly while carrying out ${cu}`
     ),
     formatNumbered(
-      "1.2",
+      `${prefix}.2`,
       `Prevent environmental pollution, avoid open burning, and dispose of used materials according to environmental and workplace requirements`
     ),
   ];
@@ -209,16 +235,17 @@ followed by numbered items taken from the Competency Units list, not the Work St
 5. Attitude describes work behaviour: discipline, integrity, cooperation, optimism, punctuality, tolerance, good judgement, 5S, and ethical conduct.
 6. Safety describes measurable precautions to protect people, operations, tools, equipment, and the work area from hazards, accidents, injury, or unsafe practices.
 7. Environment describes precautions to protect the environment, including waste handling, 3R, cleanliness, pollution prevention, and safe disposal.
-8. Avoid generic template wording. Tailor all items to the Competency Unit, Work Steps, and Performance Criteria.
-9. Use concise professional English.
+8. Attitude, Safety, and Environment numbering must follow the same unit prefix as the Work Steps. If Work Steps are 2.1 to 2.5, all Attitude, Safety, and Environment items must start with 2.1, 2.2, and so on. Do not restart at 1.1 unless the Work Steps start at 1.x.
+9. Avoid generic template wording. Tailor all items to the Competency Unit, Work Steps, and Performance Criteria.
+10. Use concise professional English.
 
 Return this JSON shape:
 {
   "learningOutcomes": ["paragraph", "", "Upon completion...", "1. ..."],
-  "knowledgeItems": ["1.1 ...", "1.2 ..."],
-  "attitudeItems": ["1.1 ...", "1.2 ..."],
-  "safetyItems": ["1.1 ...", "1.2 ..."],
-  "environmentItems": ["1.1 ...", "1.2 ..."],
+  "knowledgeItems": ["same work step number ..."],
+  "attitudeItems": ["same unit prefix ..."],
+  "safetyItems": ["same unit prefix ..."],
+  "environmentItems": ["same unit prefix ..."],
   "trainingHours": 1,
   "assessmentMethods": ["Observation", "Practical Test"]
 }
@@ -240,6 +267,23 @@ Return this JSON shape:
 
   const content = completion.choices[0]?.message?.content || "{}";
   const parsed = JSON.parse(content);
+  const knowledgeItems = coerceStringArray(
+    parsed.knowledgeItems,
+    buildKnowledge(body.cuTitle || "", workSteps, performanceCriteria)
+  );
+  const attitudeItems = coerceStringArray(
+    parsed.attitudeItems,
+    buildAttitude(body.cuTitle || "", workSteps)
+  );
+  const safetyItems = coerceStringArray(
+    parsed.safetyItems,
+    buildSafety(body.cuTitle || "", workSteps)
+  );
+  const environmentItems = coerceStringArray(
+    parsed.environmentItems,
+    buildEnvironment(body.cuTitle || "", workSteps)
+  );
+  const unitPrefix = getUnitPrefix(workSteps);
 
   return {
     learningOutcomes: coerceStringArray(
@@ -250,22 +294,10 @@ Return this JSON shape:
         competencyUnits
       )
     ),
-    knowledgeItems: coerceStringArray(
-      parsed.knowledgeItems,
-      buildKnowledge(body.cuTitle || "", workSteps, performanceCriteria)
-    ),
-    attitudeItems: coerceStringArray(
-      parsed.attitudeItems,
-      buildAttitude(body.cuTitle || "", workSteps)
-    ),
-    safetyItems: coerceStringArray(
-      parsed.safetyItems,
-      buildSafety(body.cuTitle || "", workSteps)
-    ),
-    environmentItems: coerceStringArray(
-      parsed.environmentItems,
-      buildEnvironment(body.cuTitle || "")
-    ),
+    knowledgeItems: renumberWithWorkSteps(knowledgeItems, workSteps),
+    attitudeItems: renumberWithPrefix(attitudeItems, unitPrefix),
+    safetyItems: renumberWithPrefix(safetyItems, unitPrefix),
+    environmentItems: renumberWithPrefix(environmentItems, unitPrefix),
     assessmentMethods: coerceStringArray(parsed.assessmentMethods, [
       "Observation",
       "Practical Test",
@@ -335,7 +367,7 @@ export async function POST(req: NextRequest) {
       ),
       attitudeItems: buildAttitude(cuTitle || "", normalizedWorkSteps),
       safetyItems: buildSafety(cuTitle || "", normalizedWorkSteps),
-      environmentItems: buildEnvironment(cuTitle || ""),
+      environmentItems: buildEnvironment(cuTitle || "", normalizedWorkSteps),
       assessmentMethods: ["Observation", "Practical Test"],
       trainingHours: 1,
       source: "fallback",
