@@ -57,8 +57,17 @@ const LEVEL_LABELS: Record<string, string> = {
   "6": "SIX (6)",
 };
 
-function formatLevel(level?: string) {
-  const normalized = String(level || "").replace(/\D/g, "");
+function formatLevel(level?: string): string {
+  const rawLevel = String(level || "").trim();
+
+  if (rawLevel.includes("-")) {
+    return rawLevel
+      .split("-")
+      .map((item) => formatLevel(item))
+      .join(" - ");
+  }
+
+  const normalized = rawLevel.replace(/\D/g, "");
   return LEVEL_LABELS[normalized] || level || "-";
 }
 

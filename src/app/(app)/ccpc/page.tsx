@@ -85,6 +85,78 @@ function pad2(value: number) {
   return String(value).padStart(2, "0");
 }
 
+function getTargetKey(target?: Record<string, unknown> | CCPCSummaryCluster["target"]) {
+  return `${target?.level || "-"}-${target?.occupationTitle || "CCPC"}`;
+}
+
+function getPackageLevelLabel(targets: Array<Record<string, unknown>>) {
+  const levels = Array.from(
+    new Set(
+      targets
+        .map((target) => String(target.level || "").trim())
+        .filter(Boolean)
+    )
+  );
+
+  return levels.join("-");
+}
+
+function getPackageOccupationLabel(
+  packageName: string,
+  targets: Array<Record<string, unknown>>
+) {
+  const occupations = Array.from(
+    new Set(
+      targets
+        .map((target) => String(target.occupationTitle || "").trim())
+        .filter(Boolean)
+    )
+  );
+
+  if (occupations.length === 1) return occupations[0];
+  return packageName;
+}
+
+function normalisePackageClusters(packages: CCPCPackage[]) {
+  return packages.flatMap((ccpcPackage, packageIndex) => {
+    const packageLevel = getPackageLevelLabel(ccpcPackage.includedTargets);
+    const packageOccupation = getPackageOccupationLabel(
+      ccpcPackage.packageName,
+      ccpcPackage.includedTargets
+    );
+    const packageSubarea =
+      String(ccpcPackage.includedTargets?.[0]?.subarea || "").trim() || undefined;
+    const packageTarget = {
+      occupationTitle: packageOccupation,
+      level: packageLevel,
+      subarea: packageSubarea,
+    };
+
+    return (ccpcPackage.consolidatedClusters || []).map((cluster, clusterIndex) => ({
+      ...cluster,
+      id:
+        cluster.id ||
+        `${ccpcPackage.packageId || `package-${packageIndex}`}-cluster-${clusterIndex + 1}`,
+      clusterName:
+        cluster.clusterName ||
+        cluster.suggestedName ||
+        (cluster as { clusterName?: string }).clusterName ||
+        `Core Competency ${clusterIndex + 1}`,
+      suggestedName:
+        cluster.suggestedName ||
+        cluster.clusterName ||
+        `Core Competency ${clusterIndex + 1}`,
+      finalised: true,
+      target: packageTarget,
+      targetIndex: 10_000 + packageIndex,
+      notes:
+        cluster.notes ||
+        (cluster as { coverageNotes?: string }).coverageNotes ||
+        `Gabungan dokumen: ${ccpcPackage.packageName}`,
+    }));
+  });
+}
+
 function toAIClusterResult(clusters: AIClusterResult["clusters"]): AIClusterResult {
   const totalCards = clusters.reduce((total, cluster) => {
     const items = (cluster as CCPCSummaryCluster).items || [];
@@ -275,7 +347,40 @@ function CCPCPageContent() {
   });
 
   const clusters = aiClusterResult?.clusters ?? [];
-  const targetGroups = useMemo(() => groupClustersForPackaging(clusters), [clusters]);
+  const packagedTargetKeys = useMemo(
+    () =>
+      new Set(
+        ccpcPackages.flatMap((ccpcPackage) =>
+          ccpcPackage.includedTargets.map((target) => getTargetKey(target))
+        )
+      ),
+    [ccpcPackages]
+  );
+  const displayClusters = useMemo(() => {
+    const unmergedClusters = (clusters as CCPCSummaryCluster[]).filter(
+      (cluster) => !packagedTargetKeys.has(getTargetKey(cluster.target))
+    );
+
+    return [
+      ...unmergedClusters,
+      ...normalisePackageClusters(ccpcPackages),
+    ] as AIClusterResult["clusters"];
+  }, [clusters, ccpcPackages, packagedTargetKeys]);
+  const targetGroups = useMemo(
+    () => groupClustersForPackaging(displayClusters),
+    [displayClusters]
+  );
+  const displayAIClusterResult = useMemo(
+    () =>
+      aiClusterResult
+        ? {
+            ...aiClusterResult,
+            clusters: displayClusters,
+            suggestedClusterCount: displayClusters.length,
+          }
+        : null,
+    [aiClusterResult, displayClusters]
+  );
 
   useEffect(() => {
     if (!projectId) return;
@@ -656,7 +761,9 @@ function CCPCPageContent() {
           laluanKerjaya={projectInfo.laluanKerjaya}
           tarikhKemaskini={new Date().toLocaleDateString("ms-MY")}
           jumlahKompetensi={
-            clusters.length > 0 ? `${clusters.length} Cluster` : "Belum Dijana"
+            displayClusters.length > 0
+              ? `${displayClusters.length} Cluster`
+              : "Belum Dijana"
           }
         />
 
@@ -743,7 +850,7 @@ function CCPCPageContent() {
 
         {viewMode === "document" ? (
           <CCPCDocumentMode
-            clusters={clusters}
+            clusters={displayClusters}
             section={projectInfo.sector}
             group={projectInfo.bidang}
             area={projectInfo.laluanKerjaya}
@@ -752,7 +859,7 @@ function CCPCPageContent() {
             cocsCode={projectInfo.code}
           />
         ) : viewMode === "summary" ? (
-          <CCPCSummaryMode clusters={clusters} />
+          <CCPCSummaryMode clusters={displayClusters} />
         ) : (
           <>
             <CCPCStepProgress />
@@ -819,7 +926,7 @@ function CCPCPageContent() {
               </div>
 
               <CCPCClusteringSummary
-                result={aiClusterResult}
+                result={displayAIClusterResult}
                 isRunning={isRunningClustering}
                 sessionId={sessionName}
                 refreshActive={sessionStatus === "active"}
@@ -907,7 +1014,7 @@ function CCPCPageContent() {
             ) : null}
 
             <CCPCAIClusterList
-              clusters={clusters}
+              clusters={displayClusters}
               selectedClusterId={selectedClusterId}
               onSelect={setSelectedClusterId}
               readOnly={!canManageContent}
