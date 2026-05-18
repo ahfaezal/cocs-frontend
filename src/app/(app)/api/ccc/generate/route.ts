@@ -1,4 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
+import OpenAI from "openai";
+
+type WorkStep = {
+  number: string;
+  text: string;
+};
+
+type GenerateBody = {
+  competencyTitle?: string;
+  cuTitle?: string;
+  workStepTitle?: string;
+  workSteps?: unknown;
+  competencyUnits?: unknown;
+  performanceCriteriaTexts?: unknown;
+  unitDetails?: unknown;
+  mode?: "unit" | "learningOutcomes";
+};
 
 function normalizeSentence(text: string): string {
   const trimmed = text.trim();
@@ -44,6 +61,14 @@ function normalizeCompetencyUnits(items: unknown) {
     .filter(Boolean);
 }
 
+function normalizeTextList(items: unknown) {
+  if (!Array.isArray(items)) return [];
+
+  return items
+    .map((item) => String(item ?? "").trim())
+    .filter(Boolean);
+}
+
 function formatNumbered(number: string, text: string) {
   return `${number} ${normalizeSentence(text)}`;
 }
@@ -68,56 +93,191 @@ function buildLearningOutcomes(
 
 function buildKnowledge(
   cuTitle: string,
-  workSteps: Array<{ number: string; text: string }>
+  workSteps: WorkStep[],
+  performanceCriteria: string[]
 ) {
   const cu = toLowerPhrase(cuTitle);
 
-  return workSteps.map((step) =>
-    formatNumbered(
+  return workSteps.map((step, index) => {
+    const pc = performanceCriteria[index]
+      ? ` Performance criteria reference: ${stripNumberPrefix(performanceCriteria[index])}`
+      : "";
+
+    return formatNumbered(
       step.number,
-      `Information, tools, materials, equipment, operational requirements, and work standards required to ${toLowerPhrase(
+      `Knowledge of work procedures, tools, equipment, materials, quality requirements, documentation, and applicable standards required to ${toLowerPhrase(
         step.text
-      )} for ${cu}`
-    )
-  );
+      )} for ${cu}.${pc}`
+    );
+  });
 }
 
-function buildAttitude(workSteps: Array<{ number: string; text: string }>) {
-  return workSteps.slice(0, 3).map((step) =>
+function buildAttitude(cuTitle: string, workSteps: WorkStep[]) {
+  const cu = toLowerPhrase(cuTitle);
+  const stepScope = workSteps.map((step) => toLowerPhrase(step.text)).join(", ");
+
+  return [
     formatNumbered(
-      step.number,
-      `Demonstrate discipline, cooperation, punctuality, integrity, tolerance, and responsibility when carrying out ${toLowerPhrase(
-        step.text
-      )}`
-    )
-  );
+      "1.1",
+      `Demonstrate discipline, integrity, punctuality, cooperation, tolerance, and careful judgement while performing ${cu}`
+    ),
+    formatNumbered(
+      "1.2",
+      `Communicate clearly, follow work instructions, practise 5S, and maintain professional conduct during ${stepScope}`
+    ),
+  ];
 }
 
-function buildSafety(workSteps: Array<{ number: string; text: string }>) {
-  return workSteps.slice(0, 3).map((step) =>
+function buildSafety(cuTitle: string, workSteps: WorkStep[]) {
+  const cu = toLowerPhrase(cuTitle);
+  const criticalSteps = workSteps
+    .slice(0, 3)
+    .map((step) => toLowerPhrase(step.text))
+    .join(", ");
+
+  return [
     formatNumbered(
-      step.number,
-      `Apply appropriate safety precautions, PPE, equipment inspection, warning signage, and hazard control when performing ${toLowerPhrase(
-        step.text
-      )}`
-    )
-  );
+      "1.1",
+      `Wear suitable PPE, verify tools and equipment are serviceable, and secure the work area before performing ${cu}`
+    ),
+    formatNumbered(
+      "1.2",
+      `Control hazards related to ${criticalSteps}, including unsafe movement, incorrect tools, electrical exposure, poor signage, and other operational risks`
+    ),
+  ];
 }
 
-function buildEnvironment(workSteps: Array<{ number: string; text: string }>) {
-  return workSteps.slice(0, 3).map((step) =>
+function buildEnvironment(cuTitle: string) {
+  const cu = toLowerPhrase(cuTitle);
+
+  return [
     formatNumbered(
-      step.number,
-      `Protect the work environment by maintaining cleanliness, applying 3R practices, preventing pollution, and managing waste properly while carrying out ${toLowerPhrase(
-        step.text
-      )}`
-    )
-  );
+      "1.1",
+      `Maintain cleanliness, apply 3R practices, and segregate waste materials properly while carrying out ${cu}`
+    ),
+    formatNumbered(
+      "1.2",
+      `Prevent environmental pollution, avoid open burning, and dispose of used materials according to environmental and workplace requirements`
+    ),
+  ];
+}
+
+function coerceStringArray(value: unknown, fallback: string[]) {
+  if (!Array.isArray(value)) return fallback;
+
+  const cleaned = value.map((item) => String(item ?? "").trim()).filter(Boolean);
+  return cleaned.length > 0 ? cleaned : fallback;
+}
+
+async function generateWithOpenAI(
+  body: GenerateBody,
+  workSteps: WorkStep[],
+  competencyUnits: string[],
+  performanceCriteria: string[]
+) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return null;
+
+  const client = new OpenAI({ apiKey });
+  const unitFallback = String(body.cuTitle || body.competencyTitle || "").trim();
+
+  const prompt = `
+Generate Construction Occupational Competency Standard (COCS) CCC content.
+Return valid JSON only.
+
+Context:
+- Competency title: ${body.competencyTitle || ""}
+- Competency unit title: ${body.cuTitle || ""}
+- Generation mode: ${body.mode || "unit"}
+- Competency Units under this Core Competency:
+${JSON.stringify(competencyUnits.length ? competencyUnits : [unitFallback], null, 2)}
+- Competency Unit details from CCP:
+${JSON.stringify(body.unitDetails || [], null, 2)}
+- Work Steps for this Competency Unit:
+${JSON.stringify(workSteps, null, 2)}
+- Performance Criteria from CCP:
+${JSON.stringify(performanceCriteria, null, 2)}
+
+Rules:
+1. learningOutcomes must start exactly with:
+"The learning outcomes of this competency are to enable the trainees to"
+2. learningOutcomes must include:
+"Upon completion of this competency, trainees should be able to:"
+followed by numbered items taken from the Competency Units list, not the Work Steps.
+3. Knowledge must be one-to-one with Work Steps. If Work Steps are 1.1 to 1.6, Knowledge must also be 1.1 to 1.6.
+4. Knowledge describes information required to perform each Work Step, including procedures, tools, materials, equipment, standards, quality requirements, and relevant Performance Criteria.
+5. Attitude describes work behaviour: discipline, integrity, cooperation, optimism, punctuality, tolerance, good judgement, 5S, and ethical conduct.
+6. Safety describes measurable precautions to protect people, operations, tools, equipment, and the work area from hazards, accidents, injury, or unsafe practices.
+7. Environment describes precautions to protect the environment, including waste handling, 3R, cleanliness, pollution prevention, and safe disposal.
+8. Avoid generic template wording. Tailor all items to the Competency Unit, Work Steps, and Performance Criteria.
+9. Use concise professional English.
+
+Return this JSON shape:
+{
+  "learningOutcomes": ["paragraph", "", "Upon completion...", "1. ..."],
+  "knowledgeItems": ["1.1 ...", "1.2 ..."],
+  "attitudeItems": ["1.1 ...", "1.2 ..."],
+  "safetyItems": ["1.1 ...", "1.2 ..."],
+  "environmentItems": ["1.1 ...", "1.2 ..."],
+  "trainingHours": 1,
+  "assessmentMethods": ["Observation", "Practical Test"]
+}
+`;
+
+  const completion = await client.chat.completions.create({
+    model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+    messages: [
+      {
+        role: "system",
+        content:
+          "You are an expert COCS/NOSS curriculum developer. Return valid JSON only.",
+      },
+      { role: "user", content: prompt },
+    ],
+    response_format: { type: "json_object" },
+    temperature: 0.25,
+  });
+
+  const content = completion.choices[0]?.message?.content || "{}";
+  const parsed = JSON.parse(content);
+
+  return {
+    learningOutcomes: coerceStringArray(
+      parsed.learningOutcomes,
+      buildLearningOutcomes(
+        body.competencyTitle || "",
+        body.cuTitle || "",
+        competencyUnits
+      )
+    ),
+    knowledgeItems: coerceStringArray(
+      parsed.knowledgeItems,
+      buildKnowledge(body.cuTitle || "", workSteps, performanceCriteria)
+    ),
+    attitudeItems: coerceStringArray(
+      parsed.attitudeItems,
+      buildAttitude(body.cuTitle || "", workSteps)
+    ),
+    safetyItems: coerceStringArray(
+      parsed.safetyItems,
+      buildSafety(body.cuTitle || "", workSteps)
+    ),
+    environmentItems: coerceStringArray(
+      parsed.environmentItems,
+      buildEnvironment(body.cuTitle || "")
+    ),
+    assessmentMethods: coerceStringArray(parsed.assessmentMethods, [
+      "Observation",
+      "Practical Test",
+    ]),
+    trainingHours: Number(parsed.trainingHours) || 1,
+    source: "openai",
+  };
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const body = (await req.json()) as GenerateBody;
 
     const {
       competencyTitle = "",
@@ -125,30 +285,60 @@ export async function POST(req: NextRequest) {
       workStepTitle = "",
       workSteps,
       competencyUnits = [],
+      performanceCriteriaTexts = [],
+      mode = "unit",
     } = body;
 
     const normalizedWorkSteps = normalizeWorkSteps(workStepTitle, workSteps);
     const normalizedCompetencyUnits = normalizeCompetencyUnits(competencyUnits);
+    const normalizedPerformanceCriteria = normalizeTextList(
+      performanceCriteriaTexts
+    );
 
-    if (!cuTitle || normalizedWorkSteps.length === 0) {
+    if (
+      mode !== "learningOutcomes" &&
+      (!cuTitle || normalizedWorkSteps.length === 0)
+    ) {
       return NextResponse.json(
         { error: "cuTitle and at least one work step are required" },
         { status: 400 }
       );
     }
 
+    let aiResult = null;
+
+    try {
+      aiResult = await generateWithOpenAI(
+        body,
+        normalizedWorkSteps,
+        normalizedCompetencyUnits,
+        normalizedPerformanceCriteria
+      );
+    } catch (error) {
+      console.error("CCC OpenAI generation failed, using fallback:", error);
+    }
+
+    if (aiResult) {
+      return NextResponse.json(aiResult);
+    }
+
     return NextResponse.json({
       learningOutcomes: buildLearningOutcomes(
         competencyTitle,
-        cuTitle,
+        cuTitle || "",
         normalizedCompetencyUnits
       ),
-      knowledgeItems: buildKnowledge(cuTitle, normalizedWorkSteps),
-      attitudeItems: buildAttitude(normalizedWorkSteps),
-      safetyItems: buildSafety(normalizedWorkSteps),
-      environmentItems: buildEnvironment(normalizedWorkSteps),
+      knowledgeItems: buildKnowledge(
+        cuTitle || "",
+        normalizedWorkSteps,
+        normalizedPerformanceCriteria
+      ),
+      attitudeItems: buildAttitude(cuTitle || "", normalizedWorkSteps),
+      safetyItems: buildSafety(cuTitle || "", normalizedWorkSteps),
+      environmentItems: buildEnvironment(cuTitle || ""),
       assessmentMethods: ["Observation", "Practical Test"],
       trainingHours: 1,
+      source: "fallback",
     });
   } catch (error) {
     return NextResponse.json(

@@ -655,6 +655,8 @@ function CCCPageContent() {
   const [competencyListCollapsed, setCompetencyListCollapsed] = useState(false);
   const [dirtyUnitKeys, setDirtyUnitKeys] = useState<Set<string>>(new Set());
   const [generatingUnitKey, setGeneratingUnitKey] = useState<string | null>(null);
+  const [generatingLearningOutcome, setGeneratingLearningOutcome] =
+    useState(false);
   const [savingUnitKey, setSavingUnitKey] = useState<string | null>(null);
   const [savingCompetencyCode, setSavingCompetencyCode] = useState<string | null>(
     null
@@ -953,6 +955,68 @@ function CCCPageContent() {
         trainingPrerequisite: value,
       }))
     );
+  }
+
+  async function generateLearningOutcome() {
+    if (!selectedCompetency) return;
+
+    try {
+      setGeneratingLearningOutcome(true);
+      setErrorMessage("");
+
+      const unitDetails = selectedCompetency.units.map((unit) => {
+        const ccpUnit = normalizeCCPUnitProfile(
+          ccpProfiles[unit.competencyCode]?.units?.[unit.unitCode]
+        );
+
+        return {
+          unitTitle: unit.unitTitle,
+          workSteps: ccpUnit.workSteps.filter(Boolean),
+          performanceCriteria: ccpUnit.performanceCriteria.filter(Boolean),
+        };
+      });
+
+      const res = await fetch("/api/ccc/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          mode: "learningOutcomes",
+          competencyTitle: selectedCompetency.title,
+          cuTitle: selectedCompetency.title,
+          competencyUnits: selectedCompetency.units.map((unit) => unit.unitTitle),
+          unitDetails,
+        }),
+      });
+
+      const responseText = await res.text();
+
+      if (!res.ok) {
+        throw new Error(responseText || "Gagal menjana Learning Outcomes.");
+      }
+
+      const generated = JSON.parse(responseText) as CCCGenerateResult;
+      const learningOutcome = formatLearningOutcomeFromAI(
+        generated.learningOutcomes ?? [],
+        selectedCompetency
+      );
+
+      persistProfiles(
+        buildNextProfile(selectedCompetency.code, (profile) => ({
+          ...markProfileUnsaved(profile),
+          learningOutcomeIntro: learningOutcome,
+          generatedAt: new Date().toISOString(),
+        }))
+      );
+
+      showMessage("Learning Outcomes berjaya dijana.");
+    } catch (error) {
+      console.error("Gagal jana Learning Outcomes:", error);
+      setErrorMessage("Gagal menjana Learning Outcomes. Sila semak API AI.");
+    } finally {
+      setGeneratingLearningOutcome(false);
+    }
   }
 
   function updateUnitField(
@@ -1495,6 +1559,21 @@ function CCCPageContent() {
                         LEARNING OUTCOMES
                       </th>
                       <td className="border border-slate-300 px-4 py-3">
+                        <div className="mb-3 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={generateLearningOutcome}
+                            disabled={
+                              !selectedCompetency || generatingLearningOutcome
+                            }
+                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                          >
+                            <Sparkles size={14} />
+                            {generatingLearningOutcome
+                              ? "Menjana..."
+                              : "Jana AI"}
+                          </button>
+                        </div>
                         <textarea
                           value={selectedCCCProfile?.learningOutcomeIntro || ""}
                           onChange={(event) =>
