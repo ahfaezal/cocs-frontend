@@ -343,6 +343,7 @@ function CCPCPageContent() {
     null
   );
   const [isRunningClustering, setIsRunningClustering] = useState(false);
+  const [isRestoringTargets, setIsRestoringTargets] = useState(false);
   const [isConsolidating, setIsConsolidating] = useState(false);
   const [selectedPackageKeys, setSelectedPackageKeys] = useState<string[]>([]);
   const [selectedDocumentKeys, setSelectedDocumentKeys] = useState<string[]>([]);
@@ -519,6 +520,11 @@ function CCPCPageContent() {
           .filter(Boolean)
           .join(", ")
       : standardTitle;
+  const isTargetDisplayIncomplete =
+    ccpcPackages.length === 0 &&
+    selectedDevelopmentTargets.length > 0 &&
+    targetGroups.length > 0 &&
+    targetGroups.length < selectedDevelopmentTargets.length;
 
   const sessionName = useMemo(() => {
     const slug = slugify(standardTitle || projectInfo.title || "dacum-session");
@@ -684,6 +690,67 @@ function CCPCPageContent() {
       );
     } finally {
       setIsRunningClustering(false);
+    }
+  }
+
+  async function handleRestoreOriginalTargets() {
+    if (!canManageContent || !sessionName || !projectId) return;
+
+    const confirmed = window.confirm(
+      "Pulihkan semula paparan tahap asal berdasarkan kad DACUM dan pilihan COS? Hasil CCPC semasa akan dijana semula."
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setIsRestoringTargets(true);
+
+      const res = await fetch(`${API_URL}/ccpc/cluster`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          session_id: sessionName,
+          project_id: projectId,
+        }),
+      });
+
+      if (!res.ok) {
+        const detail = await readResponseError(res);
+        throw new Error(`Gagal pulihkan tahap asal (${res.status}): ${detail}`);
+      }
+
+      const result = await res.json();
+
+      if (result.success === false) {
+        throw new Error(result.message || "Gagal pulihkan tahap asal.");
+      }
+
+      const generatedClusters = result.clusters || [];
+      const nextResult: AIClusterResult = {
+        clusters: generatedClusters,
+        unmatchedCards: [],
+        totalCards: result.total_items || 0,
+        uniqueCards: result.total_items || 0,
+        suggestedClusterCount: generatedClusters.length,
+        status: "ready",
+      };
+
+      setCCPCPackages([]);
+      setSelectedPackageKeys([]);
+      setSelectedDocumentKeys([]);
+      persistAIClusterResult(nextResult);
+      setSelectedClusterId(String(generatedClusters?.[0]?.id || ""));
+    } catch (error) {
+      console.error("Gagal pulihkan tahap asal:", error);
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Gagal memulihkan paparan tahap asal."
+      );
+    } finally {
+      setIsRestoringTargets(false);
     }
   }
 
@@ -1181,6 +1248,35 @@ function CCPCPageContent() {
               </div>
             ) : null}
 
+            {isTargetDisplayIncomplete ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="font-bold">
+                      Paparan tahap asal belum lengkap.
+                    </div>
+                    <p className="mt-1">
+                      COS menetapkan {selectedDevelopmentTargets.length} tahap,
+                      tetapi CCPC kini memaparkan {targetGroups.length} kumpulan.
+                    </p>
+                  </div>
+
+                  {canManageContent ? (
+                    <button
+                      type="button"
+                      onClick={handleRestoreOriginalTargets}
+                      disabled={isRestoringTargets}
+                      className="rounded-xl bg-amber-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {isRestoringTargets
+                        ? "Memulihkan..."
+                        : "Pulihkan Tahap Asal"}
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+
             {targetGroups.length > 0 ? (
               <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <div className="border-b border-slate-200 px-5 py-4">
@@ -1221,7 +1317,7 @@ function CCPCPageContent() {
             ) : null}
 
             <CCPCAIClusterList
-              clusters={displayClusters}
+              clusters={clusters}
               selectedClusterId={selectedClusterId}
               onSelect={setSelectedClusterId}
               readOnly={!canManageContent}
