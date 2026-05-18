@@ -190,7 +190,10 @@ export function CCPCDocumentMode({
             position: absolute;
             left: 0;
             top: 0;
+            display: flex;
             width: 100%;
+            flex-direction: column;
+            align-items: center;
           }
 
           .ccpc-no-print {
@@ -198,7 +201,12 @@ export function CCPCDocumentMode({
           }
 
           .ccpc-a4-page {
-            margin: 0 !important;
+            box-sizing: border-box !important;
+            width: 100% !important;
+            max-width: 281mm !important;
+            min-height: auto !important;
+            margin: 0 auto !important;
+            overflow: visible !important;
             box-shadow: none !important;
             page-break-after: always;
           }
@@ -215,7 +223,7 @@ export function CCPCDocumentMode({
           <div
             key={`ccpc-document-${groupIndex}-${documentTitle}`}
             className="ccpc-a4-page mx-auto overflow-x-auto rounded-2xl border border-slate-200 bg-white p-[10mm] shadow-sm"
-            style={{ width: "297mm", minHeight: "210mm" }}
+            style={{ boxSizing: "border-box", width: "281mm", minHeight: "194mm" }}
           >
             <div className="font-serif text-[11px] text-black">
         <h1 className="mb-4 text-[16px] font-bold">
