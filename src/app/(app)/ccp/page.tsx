@@ -52,6 +52,7 @@ type CCPCompetencyProfile = {
   descriptor: string;
   units: Record<string, CCPUnitProfile>;
   generatedAt?: string;
+  savedAt?: string;
 };
 
 type CCPProfiles = Record<string, CCPCompetencyProfile>;
@@ -172,6 +173,7 @@ function normalizeCompetencyProfile(
         )
       : {},
     generatedAt: profile?.generatedAt,
+    savedAt: profile?.savedAt,
   };
 }
 
@@ -341,6 +343,31 @@ function isCompetencyGenerated(profile?: CCPCompetencyProfile) {
   );
 }
 
+function isCompetencyComplete(
+  competency: Competency,
+  profile?: CCPCompetencyProfile
+) {
+  const competencyProfile = normalizeCompetencyProfile(profile);
+
+  if (!competencyProfile.descriptor.trim()) return false;
+
+  return competency.units.every((unit) =>
+    isUnitGenerated(competencyProfile.units[unit.unitCode])
+  );
+}
+
+function isCompetencySaved(
+  competency: Competency,
+  profile?: CCPCompetencyProfile
+) {
+  const competencyProfile = normalizeCompetencyProfile(profile);
+
+  return (
+    isCompetencyComplete(competency, competencyProfile) &&
+    Boolean(competencyProfile.savedAt)
+  );
+}
+
 function CCPDocumentMode({
   projectInfo,
   selectedCompetency,
@@ -504,6 +531,7 @@ function CCPPageContent() {
   const [loading, setLoading] = useState(true);
   const [generatingCode, setGeneratingCode] = useState<string | null>(null);
   const [generatingDescriptorCode, setGeneratingDescriptorCode] = useState<string | null>(null);
+  const [savingCompetencyCode, setSavingCompetencyCode] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [clusters, setClusters] = useState<StoredCluster[]>([]);
@@ -542,12 +570,17 @@ function CCPPageContent() {
   const selectedProfile = selectedCompetency
     ? normalizeCompetencyProfile(profiles[selectedCompetency.code])
     : normalizeCompetencyProfile(EMPTY_COMPETENCY_PROFILE);
-
-  const allUnits = competencies.flatMap((competency) => competency.units);
-
-  const generatedUnitCount = allUnits.filter((unit) =>
-    isUnitGenerated(profiles[unit.competencyCode]?.units?.[unit.unitCode])
+  const selectedCompetencyComplete = selectedCompetency
+    ? isCompetencyComplete(selectedCompetency, selectedProfile)
+    : false;
+  const selectedCompetencySaved = selectedCompetency
+    ? isCompetencySaved(selectedCompetency, selectedProfile)
+    : false;
+  const savedCompetencyCount = competencies.filter((competency) =>
+    isCompetencySaved(competency, profiles[competency.code])
   ).length;
+  const allCompetenciesSaved =
+    competencies.length > 0 && savedCompetencyCount === competencies.length;
 
   useEffect(() => {
     async function loadProject() {
@@ -710,12 +743,19 @@ function CCPPageContent() {
     };
   }
 
+  function markProfileUnsaved(profile: CCPCompetencyProfile) {
+    return {
+      ...profile,
+      savedAt: undefined,
+    };
+  }
+
   function updateDescriptor(value: string) {
     if (!selectedCompetency) return;
 
     persistProfiles(
       buildNextProfile(selectedCompetency.code, (profile) => ({
-        ...profile,
+        ...markProfileUnsaved(profile),
         descriptor: value,
       }))
     );
@@ -726,7 +766,7 @@ function CCPPageContent() {
 
     persistProfiles(
       buildNextProfile(selectedCompetency.code, (profile) => ({
-        ...profile,
+        ...markProfileUnsaved(profile),
         units: {
           ...profile.units,
           [unitCode]: {
@@ -743,7 +783,7 @@ function CCPPageContent() {
 
     persistProfiles(
       buildNextProfile(selectedCompetency.code, (profile) => ({
-        ...profile,
+        ...markProfileUnsaved(profile),
         units: {
           ...profile.units,
           [unitCode]: {
@@ -768,7 +808,7 @@ function CCPPageContent() {
         delete nextUnits[unit.unitCode];
 
         return {
-          ...profile,
+          ...markProfileUnsaved(profile),
           units: nextUnits,
         };
       })
@@ -902,7 +942,7 @@ async function generateDescriptor() {
 
     persistProfiles(
       buildNextProfile(selectedCompetency.code, (profile) => ({
-        ...profile,
+        ...markProfileUnsaved(profile),
         descriptor,
         generatedAt: new Date().toISOString(),
       }))
@@ -927,7 +967,7 @@ async function generateDescriptor() {
 
       persistProfiles(
         buildNextProfile(unit.competencyCode, (profile) => ({
-          ...profile,
+          ...markProfileUnsaved(profile),
           units: {
             ...profile.units,
             [unit.unitCode]: normalizeUnitProfile({
@@ -954,10 +994,37 @@ async function generateDescriptor() {
     }
 }
 
-  function saveDraft() {
-    persistProfiles(profiles);
-    setMessage("Draf CCP berjaya disimpan.");
-    setTimeout(() => setMessage(""), 2500);
+  async function saveSelectedCompetency() {
+    if (!selectedCompetency) return;
+
+    if (!selectedCompetencyComplete) {
+      alert(
+        "Lengkapkan Competency Descriptor serta semua Work Step dan Performance Criteria sebelum Save."
+      );
+      return;
+    }
+
+    const nextProfiles = buildNextProfile(selectedCompetency.code, (profile) => ({
+      ...profile,
+      savedAt: new Date().toISOString(),
+    }));
+
+    try {
+      setSavingCompetencyCode(selectedCompetency.code);
+      setProfiles(nextProfiles);
+
+      if (projectId) {
+        await saveCCPProfileToBackend(projectId, nextProfiles);
+      }
+
+      setMessage(`${selectedCompetency.code} berjaya disimpan.`);
+      setTimeout(() => setMessage(""), 2500);
+    } catch (error) {
+      console.error("Gagal simpan Core Competency:", error);
+      setErrorMessage("Gagal menyimpan Core Competency. Sila cuba semula.");
+    } finally {
+      setSavingCompetencyCode(null);
+    }
   }
 
   if (!projectId) {
@@ -1096,9 +1163,9 @@ async function generateDescriptor() {
         </div>
 
         <div>
-          <p className="text-sm text-slate-500">Unit Dijana</p>
+          <p className="text-sm text-slate-500">Core Competency Disimpan</p>
           <p className="mt-1 text-lg font-bold text-slate-900">
-            {generatedUnitCount}/{allUnits.length}
+            {savedCompetencyCount}/{competencies.length}
           </p>
         </div>
       </div>
@@ -1140,6 +1207,14 @@ async function generateDescriptor() {
               {competencies.map((competency) => {
                 const active = selectedCompetency?.code === competency.code;
                 const generated = isCompetencyGenerated(profiles[competency.code]);
+                const complete = isCompetencyComplete(
+                  competency,
+                  profiles[competency.code]
+                );
+                const saved = isCompetencySaved(
+                  competency,
+                  profiles[competency.code]
+                );
 
                 return (
                   <button
@@ -1156,7 +1231,15 @@ async function generateDescriptor() {
                       <span className="text-xs font-bold text-blue-700">
                         {competency.code}
                       </span>
-                      {generated ? (
+                      {saved ? (
+                        <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                          Disimpan
+                        </span>
+                      ) : complete ? (
+                        <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                          Perlu Save
+                        </span>
+                      ) : generated ? (
                         <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">
                           AI siap
                         </span>
@@ -1183,16 +1266,32 @@ async function generateDescriptor() {
                 <p className="mt-1 text-sm text-slate-500">
                   {selectedCompetency?.code} - {selectedCompetency?.title}
                 </p>
+                <p className="mt-2 text-xs font-semibold text-slate-500">
+                  {selectedCompetencySaved
+                    ? "Status: Core Competency telah disimpan."
+                    : selectedCompetencyComplete
+                      ? "Status: Lengkap, perlu klik Save."
+                      : "Status: Lengkapkan Descriptor dan semua WA dahulu."}
+                </p>
               </div>
 
               <div className="flex flex-wrap gap-3">
                 <button
                   type="button"
-                  onClick={saveDraft}
-                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                  onClick={saveSelectedCompetency}
+                  disabled={
+                    !selectedCompetencyComplete ||
+                    selectedCompetencySaved ||
+                    savingCompetencyCode === selectedCompetency?.code
+                  }
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                 >
                   <Save size={16} />
-                  Simpan Draf
+                  {savingCompetencyCode === selectedCompetency?.code
+                    ? "Menyimpan..."
+                    : selectedCompetencySaved
+                      ? "Telah Disimpan"
+                      : "Save Core Competency"}
                 </button>
               </div>
 
@@ -1370,13 +1469,25 @@ async function generateDescriptor() {
           Kembali ke CCPC
         </Link>
 
-        <Link
-          href={`/csp?projectId=${projectId}`}
-          className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white transition hover:bg-blue-700"
-        >
-          Seterusnya: CSP
-          <ArrowRight size={16} />
-        </Link>
+        {allCompetenciesSaved ? (
+          <Link
+            href={`/csp?projectId=${projectId}`}
+            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white transition hover:bg-blue-700"
+          >
+            Seterusnya: CSP
+            <ArrowRight size={16} />
+          </Link>
+        ) : (
+          <button
+            type="button"
+            disabled
+            title="Save semua Core Competency sebelum teruskan ke CSP"
+            className="inline-flex cursor-not-allowed items-center gap-2 rounded-xl bg-slate-300 px-5 py-3 font-semibold text-white"
+          >
+            Seterusnya: CSP
+            <ArrowRight size={16} />
+          </button>
+        )}
       </div>
     </div>
   );
