@@ -46,6 +46,7 @@ function ProjectRouteMemory() {
 export function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [checkingAuth, setCheckingAuth] = useState(true);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   useEffect(() => {
     const token = getAuthToken();
@@ -76,7 +77,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           <aside className="min-h-screen w-[290px] bg-[#071d49]" />
         }
       >
-        <Sidebar />
+        <Sidebar
+          collapsed={sidebarCollapsed}
+          onToggle={() => setSidebarCollapsed((current) => !current)}
+        />
       </Suspense>
       <div className="flex min-h-screen flex-1 flex-col">
         <Topbar />

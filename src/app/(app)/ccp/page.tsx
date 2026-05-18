@@ -9,6 +9,8 @@ import {
   ChevronRight,
   FileCheck2,
   Info,
+  PanelLeftClose,
+  PanelLeftOpen,
   Save,
   Sparkles,
   Trash2,
@@ -537,6 +539,7 @@ function CCPPageContent() {
   const [clusters, setClusters] = useState<StoredCluster[]>([]);
   const [profiles, setProfiles] = useState<CCPProfiles>({});
   const [selectedCompetencyCode, setSelectedCompetencyCode] = useState("");
+  const [competencyListCollapsed, setCompetencyListCollapsed] = useState(false);
 
   const [projectInfo, setProjectInfo] = useState<ProjectInfo>({
     id: "",
@@ -1191,70 +1194,111 @@ async function generateDescriptor() {
           selectedProfile={selectedProfile}
         />
       ) : (
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
+        <div
+          className={`grid grid-cols-1 gap-6 transition-all ${
+            competencyListCollapsed
+              ? "xl:grid-cols-[84px_minmax(0,1fr)]"
+              : "xl:grid-cols-[360px_minmax(0,1fr)]"
+          }`}
+        >
           <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-200 px-5 py-4">
-              <h2 className="text-lg font-bold text-blue-700">
-                Senarai Competency
-              </h2>
-              <p className="mt-1 text-sm text-slate-500">
-                Dipindahkan daripada cluster CCPC. Pilih CC untuk melihat semua
-                WA di bawahnya.
-              </p>
+            <div
+              className={`border-b border-slate-200 px-5 py-4 ${
+                competencyListCollapsed ? "flex justify-center" : "flex items-start justify-between gap-3"
+              }`}
+            >
+              {competencyListCollapsed ? null : (
+                <div>
+                  <h2 className="text-lg font-bold text-blue-700">
+                    Senarai Competency
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Dipindahkan daripada cluster CCPC. Pilih CC untuk melihat semua
+                    WA di bawahnya.
+                  </p>
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => setCompetencyListCollapsed((current) => !current)}
+                title={
+                  competencyListCollapsed
+                    ? "Buka Senarai Competency"
+                    : "Sorok Senarai Competency"
+                }
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-600 transition hover:bg-slate-50 hover:text-blue-700"
+              >
+                {competencyListCollapsed ? (
+                  <PanelLeftOpen size={18} />
+                ) : (
+                  <PanelLeftClose size={18} />
+                )}
+              </button>
             </div>
 
-            <div className="max-h-[680px] space-y-2 overflow-y-auto p-4">
-              {competencies.map((competency) => {
-                const active = selectedCompetency?.code === competency.code;
-                const generated = isCompetencyGenerated(profiles[competency.code]);
-                const complete = isCompetencyComplete(
-                  competency,
-                  profiles[competency.code]
-                );
-                const saved = isCompetencySaved(
-                  competency,
-                  profiles[competency.code]
-                );
+            {competencyListCollapsed ? (
+              <div className="flex flex-col items-center gap-3 px-3 py-4">
+                <div className="rounded-xl bg-blue-50 px-2.5 py-2 text-center text-xs font-bold text-blue-700">
+                  {selectedCompetency?.code || "-"}
+                </div>
+                <div className="text-center text-[11px] font-semibold text-slate-500">
+                  {savedCompetencyCount}/{competencies.length}
+                </div>
+              </div>
+            ) : (
+              <div className="max-h-[680px] space-y-2 overflow-y-auto p-4">
+                {competencies.map((competency) => {
+                  const active = selectedCompetency?.code === competency.code;
+                  const generated = isCompetencyGenerated(profiles[competency.code]);
+                  const complete = isCompetencyComplete(
+                    competency,
+                    profiles[competency.code]
+                  );
+                  const saved = isCompetencySaved(
+                    competency,
+                    profiles[competency.code]
+                  );
 
-                return (
-                  <button
-                    key={competency.code}
-                    type="button"
-                    onClick={() => setSelectedCompetencyCode(competency.code)}
-                    className={`w-full rounded-xl border px-4 py-3 text-left transition ${
-                      active
-                        ? "border-blue-600 bg-blue-50"
-                        : "border-slate-200 bg-white hover:bg-slate-50"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-xs font-bold text-blue-700">
-                        {competency.code}
-                      </span>
-                      {saved ? (
-                        <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">
-                          Disimpan
+                  return (
+                    <button
+                      key={competency.code}
+                      type="button"
+                      onClick={() => setSelectedCompetencyCode(competency.code)}
+                      className={`w-full rounded-xl border px-4 py-3 text-left transition ${
+                        active
+                          ? "border-blue-600 bg-blue-50"
+                          : "border-slate-200 bg-white hover:bg-slate-50"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-xs font-bold text-blue-700">
+                          {competency.code}
                         </span>
-                      ) : complete ? (
-                        <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700">
-                          Perlu Save
-                        </span>
-                      ) : generated ? (
-                        <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">
-                          AI siap
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className="mt-2 text-sm font-semibold text-slate-900">
-                      {competency.title}
-                    </div>
-                    <div className="mt-1 text-xs text-slate-500">
-                      {competency.units.length} Work Activity
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
+                        {saved ? (
+                          <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                            Disimpan
+                          </span>
+                        ) : complete ? (
+                          <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                            Perlu Save
+                          </span>
+                        ) : generated ? (
+                          <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                            AI siap
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="mt-2 text-sm font-semibold text-slate-900">
+                        {competency.title}
+                      </div>
+                      <div className="mt-1 text-xs text-slate-500">
+                        {competency.units.length} Work Activity
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
