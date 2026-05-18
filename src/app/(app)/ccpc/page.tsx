@@ -48,6 +48,8 @@ type CCPCSummaryCluster = AIClusterResult["clusters"][number] & {
   items?: string[];
   workStepsMap?: Record<string, string[]>;
   notes?: string;
+  targetIndex?: number;
+  finalised?: boolean;
   target?: {
     occupationTitle?: string;
     level?: string | number;
@@ -170,6 +172,70 @@ function normalisePackageClusters(packages: CCPCPackage[]) {
         (cluster as { coverageNotes?: string }).coverageNotes ||
         `Gabungan dokumen: ${ccpcPackage.packageName}`,
     }));
+  });
+}
+
+function buildFallbackRestoredClusters(
+  currentClusters: CCPCSummaryCluster[],
+  targets: COSDevelopmentTarget[]
+) {
+  const targetKeys = new Set(targets.map((target) => getTargetKey(target)));
+  const exactClusters = new Map<string, CCPCSummaryCluster[]>();
+  const mergedPool: CCPCSummaryCluster[] = [];
+
+  currentClusters.forEach((cluster) => {
+    const key = getTargetKey(cluster.target);
+
+    if (targetKeys.has(key)) {
+      exactClusters.set(key, [...(exactClusters.get(key) || []), cluster]);
+    } else {
+      mergedPool.push(cluster);
+    }
+  });
+
+  const missingTargets = targets.filter(
+    (target) => !exactClusters.has(getTargetKey(target))
+  );
+  const chunkSize =
+    missingTargets.length > 0
+      ? Math.max(4, Math.ceil(mergedPool.length / missingTargets.length))
+      : 0;
+  let poolIndex = 0;
+  const restored: CCPCSummaryCluster[] = [];
+
+  targets.forEach((target, targetIndex) => {
+    const key = getTargetKey(target);
+    const existing = exactClusters.get(key);
+    const source =
+      existing && existing.length > 0
+        ? existing
+        : mergedPool.slice(poolIndex, poolIndex + chunkSize);
+
+    if (!existing || existing.length === 0) {
+      poolIndex += chunkSize;
+    }
+
+    source.forEach((cluster, clusterIndex) => {
+      restored.push({
+        ...cluster,
+        id: `restored-${target.level}-${clusterIndex + 1}-${Date.now()}`,
+        target: {
+          occupationTitle: target.occupationTitle,
+          level: target.level,
+          subarea: target.subarea,
+        },
+        targetIndex,
+        finalised: false,
+        notes:
+          cluster.notes ||
+          "Dipulihkan daripada paparan gabungan untuk mengembalikan tahap asal.",
+      });
+    });
+  });
+
+  return restored.filter((cluster) => {
+    const items = cluster.items || cluster.cards || [];
+    return (cluster.clusterName || cluster.suggestedName) && items.length > 0;
   });
 }
 
@@ -724,7 +790,37 @@ function CCPCPageContent() {
       const result = await res.json();
 
       if (result.success === false) {
-        throw new Error(result.message || "Gagal pulihkan tahap asal.");
+        const fallbackClusters = buildFallbackRestoredClusters(
+          displayClusters as CCPCSummaryCluster[],
+          selectedDevelopmentTargets
+        );
+
+        if (fallbackClusters.length === 0) {
+          throw new Error(result.message || "Gagal pulihkan tahap asal.");
+        }
+
+        const saveRes = await fetch(`${API_URL}/ccpc/clusters/${sessionName}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ clusters: fallbackClusters }),
+        });
+
+        if (!saveRes.ok) {
+          const detail = await readResponseError(saveRes);
+          throw new Error(`Gagal simpan pemulihan (${saveRes.status}): ${detail}`);
+        }
+
+        setCCPCPackages([]);
+        setSelectedPackageKeys([]);
+        setSelectedDocumentKeys([]);
+        persistAIClusterResult(toAIClusterResult(fallbackClusters));
+        setSelectedClusterId(String(fallbackClusters?.[0]?.id || ""));
+        alert(
+          "Paparan tahap asal dipulihkan menggunakan fallback daripada cluster gabungan sedia ada."
+        );
+        return;
       }
 
       const generatedClusters = result.clusters || [];
