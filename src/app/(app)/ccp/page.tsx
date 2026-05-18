@@ -72,6 +72,7 @@ type StoredCluster = {
   items?: unknown[];
   cards?: unknown[];
   finalised?: boolean;
+  target?: StoredTarget;
 };
 
 type ProjectResponse = {
@@ -625,6 +626,22 @@ function CCPPageContent() {
 
     async function loadCCPCClusters() {
       try {
+        const selectionRes = await fetch(`${API_URL}/ccpc/selection/${sessionName}`, {
+          cache: "no-store",
+        });
+
+        if (selectionRes.ok) {
+          const selectionPayload = await selectionRes.json();
+          const selectedClusters = getUsableClusters(
+            extractStoredClusters(selectionPayload)
+          );
+
+          if (selectedClusters.length > 0) {
+            setClusters(selectedClusters);
+            return;
+          }
+        }
+
         const res = await fetch(`${API_URL}/ccpc/clusters/${sessionName}`, {
           cache: "no-store",
         });

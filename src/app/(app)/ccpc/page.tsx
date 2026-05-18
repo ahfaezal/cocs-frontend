@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Suspense, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, ChevronRight, Info, Sparkles } from "lucide-react";
 
 import { CCPCHeader } from "@/components/ccpc/ccpc-header";
@@ -312,6 +312,7 @@ function groupClustersForPackaging(clusters: AIClusterResult["clusters"]) {
 }
 
 function CCPCPageContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const projectId = searchParams.get("projectId") || "";
   const currentUser = useCurrentUser();
@@ -330,6 +331,8 @@ function CCPCPageContent() {
   const [isRunningClustering, setIsRunningClustering] = useState(false);
   const [isConsolidating, setIsConsolidating] = useState(false);
   const [selectedPackageKeys, setSelectedPackageKeys] = useState<string[]>([]);
+  const [selectedDocumentKeys, setSelectedDocumentKeys] = useState<string[]>([]);
+  const [isSavingSelection, setIsSavingSelection] = useState(false);
   const [packageName, setPackageName] = useState("");
   const [ccpcPackages, setCCPCPackages] = useState<CCPCPackage[]>([]);
   const [sessionStatus, setSessionStatus] = useState<SessionStatus>("draft");
@@ -381,6 +384,13 @@ function CCPCPageContent() {
         : null,
     [aiClusterResult, displayClusters]
   );
+
+  useEffect(() => {
+    const validKeys = new Set(targetGroups.map((group) => group.key));
+    setSelectedDocumentKeys((prev) =>
+      prev.filter((key) => validKeys.has(key))
+    );
+  }, [targetGroups]);
 
   useEffect(() => {
     if (!projectId) return;
@@ -656,6 +666,61 @@ function CCPCPageContent() {
     setSelectedPackageKeys((prev) =>
       prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key]
     );
+  }
+
+  function toggleDocumentTarget(key: string) {
+    setSelectedDocumentKeys((prev) =>
+      prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key]
+    );
+  }
+
+  async function handleProceedToCCP() {
+    if (!canManageContent || !sessionName) return;
+
+    if (selectedDocumentKeys.length === 0) {
+      alert("Pilih sekurang-kurangnya satu dokumen untuk dibangunkan di CCP.");
+      return;
+    }
+
+    const selectedClusters = (displayClusters as CCPCSummaryCluster[]).filter(
+      (cluster) => selectedDocumentKeys.includes(getTargetKey(cluster.target))
+    );
+
+    if (selectedClusters.length === 0) {
+      alert("Tiada cluster ditemui untuk dokumen yang dipilih.");
+      return;
+    }
+
+    try {
+      setIsSavingSelection(true);
+
+      const res = await fetch(`${API_URL}/ccpc/selection/${sessionName}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          selected_document_keys: selectedDocumentKeys,
+          clusters: selectedClusters,
+        }),
+      });
+
+      if (!res.ok) {
+        const detail = await readResponseError(res);
+        throw new Error(`Gagal menyimpan pilihan dokumen (${res.status}): ${detail}`);
+      }
+
+      router.push(`/ccp?projectId=${projectId}`);
+    } catch (error) {
+      console.error("Gagal simpan pilihan dokumen CCP:", error);
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Gagal menyimpan pilihan dokumen untuk CCP."
+      );
+    } finally {
+      setIsSavingSelection(false);
+    }
   }
 
   async function readResponseError(res: Response) {
@@ -1013,12 +1078,58 @@ function CCPCPageContent() {
               </div>
             ) : null}
 
+            {targetGroups.length > 0 ? (
+              <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-200 px-5 py-4">
+                  <h3 className="text-lg font-bold text-blue-700">
+                    Pilihan Dokumen untuk CCP
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Pilih dokumen akhir yang hendak dibangunkan. Hanya pilihan
+                    ini akan digunakan di paparan CCP.
+                  </p>
+                </div>
+
+                <div className="grid gap-3 p-5 md:grid-cols-2 xl:grid-cols-3">
+                  {targetGroups.map((group) => (
+                    <label
+                      key={`ccp-doc-${group.key}`}
+                      className={`flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 text-sm font-semibold transition ${
+                        selectedDocumentKeys.includes(group.key)
+                          ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                          : "border-slate-200 text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedDocumentKeys.includes(group.key)}
+                        onChange={() => toggleDocumentTarget(group.key)}
+                      />
+                      <span>
+                        {group.label}{" "}
+                        <span className="font-normal text-slate-500">
+                          ({group.clusters.length} Core Competency)
+                        </span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
             <CCPCAIClusterList
               clusters={displayClusters}
               selectedClusterId={selectedClusterId}
               onSelect={setSelectedClusterId}
               readOnly={!canManageContent}
               proceedHref={`/ccp?projectId=${projectId}`}
+              canProceedExtra={selectedDocumentKeys.length > 0 && !isSavingSelection}
+              proceedDisabledTitle={
+                selectedDocumentKeys.length === 0
+                  ? "Pilih dokumen untuk CCP dahulu"
+                  : "Finalise semua cluster dan klik Save di bawah sebelum teruskan ke CCP"
+              }
+              onProceed={handleProceedToCCP}
               sessionId={sessionName}
               onClustersChange={handleClusterListChange}
             />

@@ -45,6 +45,9 @@ interface CCPCAIClusterListProps {
   onSelect: (clusterId: string) => void;
   readOnly?: boolean;
   proceedHref?: string;
+  canProceedExtra?: boolean;
+  proceedDisabledTitle?: string;
+  onProceed?: () => void;
   sessionId?: string;
   onClustersChange?: (clusters: AICluster[]) => void;
 }
@@ -66,6 +69,9 @@ export function CCPCAIClusterList({
   onSelect,
   readOnly = false,
   proceedHref,
+  canProceedExtra = true,
+  proceedDisabledTitle = "Finalise semua cluster dan klik Save di bawah sebelum teruskan ke CCP",
+  onProceed,
   sessionId,
   onClustersChange,
 }: CCPCAIClusterListProps) {
@@ -282,7 +288,7 @@ export function CCPCAIClusterList({
   ).length;
   const allFinalised =
     editableClusters.length > 0 && finalisedCount === editableClusters.length;
-  const canProceed = allFinalised && allSaved;
+  const canProceed = allFinalised && allSaved && canProceedExtra;
 
   async function saveAllClusters() {
     if (readOnly || !sessionId || !allFinalised) return;
@@ -378,19 +384,30 @@ export function CCPCAIClusterList({
               Tambah Nama Cluster
             </button>
 
-            {canProceed && proceedHref ? (
-              <Link
-                href={proceedHref}
-                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
-              >
-                <ArrowRight size={16} />
-                Proceed to CCP
-              </Link>
+            {canProceed && (proceedHref || onProceed) ? (
+              onProceed ? (
+                <button
+                  type="button"
+                  onClick={onProceed}
+                  className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
+                >
+                  <ArrowRight size={16} />
+                  Proceed to CCP
+                </button>
+              ) : (
+                <Link
+                  href={proceedHref || "#"}
+                  className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
+                >
+                  <ArrowRight size={16} />
+                  Proceed to CCP
+                </Link>
+              )
             ) : (
               <button
                 type="button"
                 disabled
-                title="Finalise semua cluster dan klik Save di bawah sebelum teruskan ke CCP"
+                title={proceedDisabledTitle}
                 className="inline-flex cursor-not-allowed items-center gap-2 rounded-xl bg-slate-300 px-4 py-2.5 text-sm font-semibold text-white"
               >
                 <ArrowRight size={16} />
