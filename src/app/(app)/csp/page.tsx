@@ -407,8 +407,8 @@ function parseCommitteeRows(value?: string, count = 4): CommitteeRow[] {
       if (!isRecord(row)) return { left: "", right: "" };
 
       return {
-        left: cleanText(row.left),
-        right: cleanText(row.right),
+        left: String(row.left ?? ""),
+        right: String(row.right ?? ""),
       };
     });
   } catch {
@@ -484,6 +484,49 @@ function formatCommitteeRole(role: string) {
 
 function hasFilledRow(rows: CommitteeRow[]) {
   return rows.some((row) => row.left.trim() && row.right.trim());
+}
+
+function getCSPMissingItems(params: {
+  isSaved: boolean;
+  competenciesCount: number;
+  technicalRows: CommitteeRow[];
+  developmentCommittee: StandardDevelopmentCommittee;
+}) {
+  const missing: string[] = [];
+
+  if (params.competenciesCount === 0) {
+    missing.push("Occupational Competencies belum tersedia daripada CCPC/CCP.");
+  }
+
+  if (!hasFilledRow(params.technicalRows)) {
+    missing.push(
+      "Bahagian 6: Standard Technical Evaluation Committee perlukan sekurang-kurangnya satu nama dan organisasi/peranan."
+    );
+  }
+
+  if (!hasFilledRow(params.developmentCommittee.committee)) {
+    missing.push(
+      "Bahagian 7: Committee Members perlukan sekurang-kurangnya satu nama dan organisasi/peranan."
+    );
+  }
+
+  if (!hasFilledRow(params.developmentCommittee.secretariat)) {
+    missing.push(
+      "Bahagian 7: Secretariat perlukan sekurang-kurangnya satu nama dan organisasi/peranan."
+    );
+  }
+
+  if (!hasFilledRow(params.developmentCommittee.facilitator)) {
+    missing.push(
+      "Bahagian 7: Facilitator perlukan sekurang-kurangnya satu nama dan organisasi/peranan."
+    );
+  }
+
+  if (!params.isSaved) {
+    missing.push("Klik Save selepas semua maklumat dikemaskini.");
+  }
+
+  return missing;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1632,11 +1675,14 @@ function CSPPageContent() {
   const cccHref = projectId ? `/ccc?projectId=${projectId}` : "/ccc";
   const technicalCommitteeRows = parseCommitteeRows(cspSections["6"], 4);
   const developmentCommittee = parseDevelopmentCommittee(cspSections["7"]);
-  const isCSPReadyForNext =
-    isCSPSaved &&
-    competencies.length > 0 &&
-    hasFilledRow(technicalCommitteeRows) &&
-    hasFilledRow(developmentCommittee.committee);
+  const cspMissingItems = getCSPMissingItems({
+    isSaved: isCSPSaved,
+    competenciesCount: competencies.length,
+    technicalRows: technicalCommitteeRows,
+    developmentCommittee,
+  });
+  const isCSPReadyForNext = cspMissingItems.length === 0;
+  const cspMissingMessage = cspMissingItems.join("\n");
 
   function updateCSPSection(sectionNo: string, content: string) {
     setIsCSPSaved(false);
@@ -2046,8 +2092,12 @@ function CSPPageContent() {
                   ) : (
                     <button
                       type="button"
-                      disabled
-                      title="Lengkapkan maklumat wajib dan klik Save sebelum teruskan ke CCC"
+                      onClick={() =>
+                        alert(
+                          `Sila lengkapkan perkara berikut:\n\n${cspMissingMessage}`
+                        )
+                      }
+                      title={cspMissingMessage}
                       className="inline-flex cursor-not-allowed items-center gap-2 rounded-xl bg-slate-300 px-5 py-3 font-semibold text-white"
                     >
                       Seterusnya: CCC
@@ -2056,6 +2106,19 @@ function CSPPageContent() {
                   )}
                 </div>
               </div>
+
+              {!isCSPReadyForNext ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800">
+                  <div className="font-semibold">
+                    Belum boleh teruskan ke CCC.
+                  </div>
+                  <ul className="mt-2 list-disc space-y-1 pl-5">
+                    {cspMissingItems.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
             </div>
           </div>
 
