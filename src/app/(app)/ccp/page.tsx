@@ -48,6 +48,7 @@ type CCPUnitProfile = {
   workSteps: string[];
   performanceCriteria: string[];
   generatedAt?: string;
+  savedAt?: string;
 };
 
 type CCPCompetencyProfile = {
@@ -156,6 +157,7 @@ function normalizeUnitProfile(profile?: Partial<CCPUnitProfile>): CCPUnitProfile
     workSteps: normalizeList(profile?.workSteps),
     performanceCriteria: normalizeList(profile?.performanceCriteria),
     generatedAt: profile?.generatedAt,
+    savedAt: profile?.savedAt,
   };
 }
 
@@ -540,6 +542,8 @@ function CCPPageContent() {
   const [profiles, setProfiles] = useState<CCPProfiles>({});
   const [selectedCompetencyCode, setSelectedCompetencyCode] = useState("");
   const [competencyListCollapsed, setCompetencyListCollapsed] = useState(false);
+  const [dirtyUnitKeys, setDirtyUnitKeys] = useState<Set<string>>(new Set());
+  const [savingUnitKey, setSavingUnitKey] = useState<string | null>(null);
 
   const [projectInfo, setProjectInfo] = useState<ProjectInfo>({
     id: "",
@@ -753,6 +757,39 @@ function CCPPageContent() {
     };
   }
 
+  function getUnitKey(competencyCode: string, unitCode: string) {
+    return `${competencyCode}:${unitCode}`;
+  }
+
+  function markUnitDirty(competencyCode: string, unitCode: string) {
+    const unitKey = getUnitKey(competencyCode, unitCode);
+
+    setDirtyUnitKeys((current) => {
+      const next = new Set(current);
+      next.add(unitKey);
+      return next;
+    });
+  }
+
+  function clearDirtyUnits(competencyCode: string, unitCodes?: string[]) {
+    setDirtyUnitKeys((current) => {
+      const next = new Set(current);
+      const allowedUnitCodes = unitCodes ? new Set(unitCodes) : null;
+
+      for (const key of current) {
+        const [keyCompetencyCode, keyUnitCode] = key.split(":");
+        if (
+          keyCompetencyCode === competencyCode &&
+          (!allowedUnitCodes || allowedUnitCodes.has(keyUnitCode))
+        ) {
+          next.delete(key);
+        }
+      }
+
+      return next;
+    });
+  }
+
   function updateDescriptor(value: string) {
     if (!selectedCompetency) return;
 
@@ -766,6 +803,8 @@ function CCPPageContent() {
 
   function updateUnitWorkSteps(unitCode: string, value: string) {
     if (!selectedCompetency) return;
+
+    markUnitDirty(selectedCompetency.code, unitCode);
 
     persistProfiles(
       buildNextProfile(selectedCompetency.code, (profile) => ({
@@ -783,6 +822,8 @@ function CCPPageContent() {
 
   function updateUnitPerformanceCriteria(unitCode: string, value: string) {
     if (!selectedCompetency) return;
+
+    markUnitDirty(selectedCompetency.code, unitCode);
 
     persistProfiles(
       buildNextProfile(selectedCompetency.code, (profile) => ({
@@ -804,6 +845,8 @@ function CCPPageContent() {
     );
 
     if (!confirmClear) return;
+
+    markUnitDirty(unit.competencyCode, unit.unitCode);
 
     persistProfiles(
       buildNextProfile(unit.competencyCode, (profile) => {
@@ -968,6 +1011,8 @@ async function generateDescriptor() {
 
       const generated = await requestAIProfile(unit);
 
+      markUnitDirty(unit.competencyCode, unit.unitCode);
+
       persistProfiles(
         buildNextProfile(unit.competencyCode, (profile) => ({
           ...markProfileUnsaved(profile),
@@ -997,6 +1042,41 @@ async function generateDescriptor() {
     }
 }
 
+  async function saveUnitProfile(unit: CompetencyUnit) {
+    const unitKey = getUnitKey(unit.competencyCode, unit.unitCode);
+
+    if (!dirtyUnitKeys.has(unitKey)) return;
+
+    const nextProfiles = buildNextProfile(unit.competencyCode, (profile) => ({
+      ...markProfileUnsaved(profile),
+      units: {
+        ...profile.units,
+        [unit.unitCode]: {
+          ...normalizeUnitProfile(profile.units[unit.unitCode]),
+          savedAt: new Date().toISOString(),
+        },
+      },
+    }));
+
+    try {
+      setSavingUnitKey(unitKey);
+      setProfiles(nextProfiles);
+
+      if (projectId) {
+        await saveCCPProfileToBackend(projectId, nextProfiles);
+      }
+
+      clearDirtyUnits(unit.competencyCode, [unit.unitCode]);
+      setMessage(`${unit.unitCode} berjaya disimpan.`);
+      setTimeout(() => setMessage(""), 2500);
+    } catch (error) {
+      console.error("Gagal simpan Competency Unit:", error);
+      setErrorMessage("Gagal simpan Competency Unit. Sila cuba semula.");
+    } finally {
+      setSavingUnitKey(null);
+    }
+  }
+
   async function saveSelectedCompetency() {
     if (!selectedCompetency) return;
 
@@ -1007,9 +1087,19 @@ async function generateDescriptor() {
       return;
     }
 
+    const savedAt = new Date().toISOString();
     const nextProfiles = buildNextProfile(selectedCompetency.code, (profile) => ({
       ...profile,
-      savedAt: new Date().toISOString(),
+      savedAt,
+      units: Object.fromEntries(
+        selectedCompetency.units.map((unit) => [
+          unit.unitCode,
+          {
+            ...normalizeUnitProfile(profile.units[unit.unitCode]),
+            savedAt,
+          },
+        ])
+      ),
     }));
 
     try {
@@ -1020,6 +1110,10 @@ async function generateDescriptor() {
         await saveCCPProfileToBackend(projectId, nextProfiles);
       }
 
+      clearDirtyUnits(
+        selectedCompetency.code,
+        selectedCompetency.units.map((unit) => unit.unitCode)
+      );
       setMessage(`${selectedCompetency.code} berjaya disimpan.`);
       setTimeout(() => setMessage(""), 2500);
     } catch (error) {
@@ -1431,6 +1525,11 @@ async function generateDescriptor() {
                       const unitProfile = normalizeUnitProfile(
                         selectedProfile.units[unit.unitCode]
                       );
+                      const unitKey = getUnitKey(
+                        unit.competencyCode,
+                        unit.unitCode
+                      );
+                      const unitDirty = dirtyUnitKeys.has(unitKey);
 
                       return (
                         <tr key={unit.unitCode}>
@@ -1490,6 +1589,15 @@ async function generateDescriptor() {
                               >
                                 <Trash2 size={14} />
                                 Kosongkan
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => saveUnitProfile(unit)}
+                                disabled={!unitDirty || savingUnitKey === unitKey}
+                                className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                              >
+                                <Save size={14} />
+                                {savingUnitKey === unitKey ? "Menyimpan..." : "Save"}
                               </button>
                             </div>
                           </td>
