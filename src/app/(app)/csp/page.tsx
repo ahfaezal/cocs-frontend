@@ -7,8 +7,6 @@ import {
   ArrowLeft,
   ArrowRight,
   ChevronRight,
-  Eye,
-  FileText,
   Info,
   Plus,
   Save,
@@ -51,6 +49,12 @@ type StoredCluster = {
   items?: unknown[];
   cards?: unknown[];
   finalised?: boolean;
+};
+
+type PanelCard = {
+  panel_name?: string;
+  panel_position?: string;
+  panel_organization?: string;
 };
 
 type CompetencySummary = {
@@ -451,6 +455,22 @@ function stringifyDevelopmentCommittee(data: StandardDevelopmentCommittee) {
   return JSON.stringify(data);
 }
 
+function buildDevelopmentCommitteeFromMembers(
+  members: CommitteeMember[]
+): StandardDevelopmentCommittee {
+  return {
+    committee:
+      members.length > 0
+        ? members.map((member) => ({
+            left: member.name,
+            right: `${member.organization} - ${member.role}`,
+          }))
+        : createEmptyCommitteeRows(1),
+    secretariat: createEmptyCommitteeRows(1),
+    facilitator: createEmptyCommitteeRows(1),
+  };
+}
+
 function formatCommitteeRole(role: string) {
   const labels: Record<string, string> = {
     PROJECT_MANAGER: "Project Manager",
@@ -460,6 +480,10 @@ function formatCommitteeRole(role: string) {
   };
 
   return labels[role] || role.replace(/_/g, " ");
+}
+
+function hasFilledRow(rows: CommitteeRow[]) {
+  return rows.some((row) => row.left.trim() && row.right.trim());
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1202,12 +1226,28 @@ function CSPTermTableEditor({
 
 function CSPDevelopmentCommitteeEditor({
   content,
+  defaultCommitteeMembers,
   onContentChange,
 }: {
   content?: string;
+  defaultCommitteeMembers?: CommitteeMember[];
   onContentChange: (content: string) => void;
 }) {
-  const data = parseDevelopmentCommittee(content);
+  const hasSavedContent = Boolean(content?.trim());
+  const data =
+    !hasSavedContent && defaultCommitteeMembers && defaultCommitteeMembers.length > 0
+      ? buildDevelopmentCommitteeFromMembers(defaultCommitteeMembers)
+      : parseDevelopmentCommittee(content);
+
+  useEffect(() => {
+    if (!hasSavedContent && defaultCommitteeMembers && defaultCommitteeMembers.length > 0) {
+      onContentChange(
+        stringifyDevelopmentCommittee(
+          buildDevelopmentCommitteeFromMembers(defaultCommitteeMembers)
+        )
+      );
+    }
+  }, [defaultCommitteeMembers, hasSavedContent, onContentChange]);
 
   function updateGroup(
     group: keyof StandardDevelopmentCommittee,
@@ -1464,6 +1504,7 @@ function CSPPageContent() {
   const [clusters, setClusters] = useState<StoredCluster[]>([]);
   const [cspSections, setCspSections] = useState<Record<string, string>>({});
   const [isSavingCSP, setIsSavingCSP] = useState(false);
+  const [isCSPSaved, setIsCSPSaved] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
   const [committeeMembers, setCommitteeMembers] = useState<CommitteeMember[]>(
     []
@@ -1589,6 +1630,22 @@ function CSPPageContent() {
   );
   const ccpHref = projectId ? `/ccp?projectId=${projectId}` : "/ccp";
   const cccHref = projectId ? `/ccc?projectId=${projectId}` : "/ccc";
+  const technicalCommitteeRows = parseCommitteeRows(cspSections["6"], 4);
+  const developmentCommittee = parseDevelopmentCommittee(cspSections["7"]);
+  const isCSPReadyForNext =
+    isCSPSaved &&
+    competencies.length > 0 &&
+    hasFilledRow(technicalCommitteeRows) &&
+    hasFilledRow(developmentCommittee.committee);
+
+  function updateCSPSection(sectionNo: string, content: string) {
+    setIsCSPSaved(false);
+    setSaveMessage("");
+    setCspSections((prev) => ({
+      ...prev,
+      [sectionNo]: content,
+    }));
+  }
 
   useEffect(() => {
     if (!projectId) return;
@@ -1611,6 +1668,7 @@ function CSPPageContent() {
         };
 
         setCspSections(data.sections || {});
+        setIsCSPSaved(Boolean(data.sections && Object.keys(data.sections).length > 0));
       } catch (error) {
         console.error("Gagal load kandungan CSP:", error);
       }
@@ -1665,6 +1723,7 @@ function CSPPageContent() {
       }
 
       setCspSections(nextSections);
+      setIsCSPSaved(true);
       setSaveMessage("Kandungan CSP telah disimpan.");
     } catch (error) {
       console.error("Gagal simpan kandungan CSP:", error);
@@ -1683,12 +1742,30 @@ function CSPPageContent() {
     async function loadCCPCClusters() {
       try {
         const token = getAuthToken();
+        const headers = {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        };
+
+        const selectionRes = await fetch(`${API_URL}/ccpc/selection/${sessionName}`, {
+          cache: "no-store",
+          headers,
+        });
+
+        if (selectionRes.ok) {
+          const selectionPayload = await selectionRes.json();
+          const selectedClusters = getUsableClusters(
+            extractStoredClusters(selectionPayload)
+          );
+
+          if (selectedClusters.length > 0) {
+            setClusters(selectedClusters);
+            return;
+          }
+        }
 
         const res = await fetch(`${API_URL}/ccpc/clusters/${sessionName}`, {
           cache: "no-store",
-          headers: {
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
+          headers,
         });
 
         if (!res.ok) {
@@ -1708,7 +1785,7 @@ function CSPPageContent() {
   }, [sessionName]);
 
   useEffect(() => {
-    if (!projectId) {
+    if (!sessionName) {
       queueMicrotask(() => setCommitteeMembers([]));
       return;
     }
@@ -1720,43 +1797,35 @@ function CSPPageContent() {
       };
 
       try {
-        const [assignmentsRes, usersRes] = await Promise.all([
-          fetch(`${API_URL}/project-assignments/project/${projectId}`, {
-            cache: "no-store",
-            headers,
-          }),
-          fetch(`${API_URL}/users/`, {
-            cache: "no-store",
-            headers,
-          }),
-        ]);
+        const cardsRes = await fetch(`${API_URL}/ccpc/cards/${sessionName}`, {
+          cache: "no-store",
+          headers,
+        });
 
-        if (!assignmentsRes.ok || !usersRes.ok) {
+        if (!cardsRes.ok) {
           setCommitteeMembers([]);
           return;
         }
 
-        const assignments = (await assignmentsRes.json()) as ProjectAssignment[];
-        const users = (await usersRes.json()) as UserSummary[];
+        const cards = (await cardsRes.json()) as PanelCard[];
+        const panelMap = new Map<string, CommitteeMember>();
 
-        const activeAssignments = assignments.filter(
-          (assignment) => assignment.status !== "INACTIVE"
-        );
+        cards.forEach((card) => {
+          const name = cleanText(card.panel_name);
 
-        setCommitteeMembers(
-          activeAssignments
-            .map((assignment) => {
-              const user = users.find((item) => item.id === assignment.user_id);
-              if (!user || user.status === "INACTIVE") return null;
+          if (!name || name.toLowerCase() === "panel") return;
 
-              return {
-                name: user.name,
-                organization: user.organization || "-",
-                role: formatCommitteeRole(assignment.assignment_role),
-              };
-            })
-            .filter((member): member is CommitteeMember => Boolean(member))
-        );
+          const key = name.toLowerCase();
+          if (panelMap.has(key)) return;
+
+          panelMap.set(key, {
+            name,
+            organization: cleanText(card.panel_organization) || "-",
+            role: cleanText(card.panel_position) || "Panel Industri",
+          });
+        });
+
+        setCommitteeMembers(Array.from(panelMap.values()));
       } catch (error) {
         console.error("Gagal load ahli panel CSP:", error);
         setCommitteeMembers([]);
@@ -1764,7 +1833,7 @@ function CSPPageContent() {
     }
 
     loadCommitteeMembers();
-  }, [projectId]);
+  }, [sessionName]);
 
   return (
     <div className="space-y-6">
@@ -1828,38 +1897,18 @@ function CSPPageContent() {
                 Builder Mode
               </button>
 
-              <button
-                type="button"
-                onClick={() => setViewMode("document")}
+            <button
+              type="button"
+              onClick={() => setViewMode("document")}
                 className={`rounded-lg px-5 py-2 text-sm font-semibold ${
                   viewMode === "document"
                     ? "bg-blue-600 text-white"
                     : "text-slate-600 hover:bg-slate-50"
                 }`}
-              >
-                Document Mode
-              </button>
-            </div>
-
-            <button className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 font-medium text-slate-700 transition hover:bg-slate-50">
-              <FileText size={16} />
-              Salin dari Templat
-            </button>
-
-            <button className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 font-medium text-slate-700 transition hover:bg-slate-50">
-              <Eye size={16} />
-              Pratonton
-            </button>
-
-            <button
-              type="button"
-              onClick={handleSaveCSPContent}
-              disabled={isSavingCSP}
-              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <Save size={16} />
-              {isSavingCSP ? "Menyimpan..." : "Simpan"}
+              Document Mode
             </button>
+          </div>
           </div>
         </div>
       </div>
@@ -1907,10 +1956,7 @@ function CSPPageContent() {
                   content={cspSections[activeBuilderSection]}
                   documentContext={cspDocumentContext}
                   onContentChange={(content) =>
-                    setCspSections((prev) => ({
-                      ...prev,
-                      [activeBuilderSection]: content,
-                    }))
+                    updateCSPSection(activeBuilderSection, content)
                   }
                 />
               ) : activeBuilderSection === "6" ? (
@@ -1919,20 +1965,15 @@ function CSPPageContent() {
                   description="Lengkapkan nama dan organisasi/peranan jawatankuasa penilaian teknikal."
                   content={cspSections["6"]}
                   onContentChange={(content) =>
-                    setCspSections((prev) => ({
-                      ...prev,
-                      "6": content,
-                    }))
+                    updateCSPSection("6", content)
                   }
                 />
               ) : activeBuilderSection === "7" ? (
                 <CSPDevelopmentCommitteeEditor
                   content={cspSections["7"]}
+                  defaultCommitteeMembers={committeeMembers}
                   onContentChange={(content) =>
-                    setCspSections((prev) => ({
-                      ...prev,
-                      "7": content,
-                    }))
+                    updateCSPSection("7", content)
                   }
                 />
               ) : (
@@ -1946,10 +1987,7 @@ function CSPPageContent() {
                   subsector={projectInfo.subsector}
                   sectionContent={cspSections[activeBuilderSection]}
                   onContentChange={(content) =>
-                    setCspSections((prev) => ({
-                      ...prev,
-                      [activeBuilderSection]: content,
-                    }))
+                    updateCSPSection(activeBuilderSection, content)
                   }
                 />
               )}
@@ -1994,16 +2032,28 @@ function CSPPageContent() {
                     className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <Save size={16} />
-                    {isSavingCSP ? "Menyimpan..." : "Simpan Draf"}
+                    {isSavingCSP ? "Menyimpan..." : "Save"}
                   </button>
 
-                  <Link
-                    href={cccHref}
-                    className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white transition hover:bg-blue-700"
-                  >
-                    Seterusnya: CCC
-                    <ArrowRight size={16} />
-                  </Link>
+                  {isCSPReadyForNext ? (
+                    <Link
+                      href={cccHref}
+                      className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white transition hover:bg-blue-700"
+                    >
+                      Seterusnya: CCC
+                      <ArrowRight size={16} />
+                    </Link>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled
+                      title="Lengkapkan maklumat wajib dan klik Save sebelum teruskan ke CCC"
+                      className="inline-flex cursor-not-allowed items-center gap-2 rounded-xl bg-slate-300 px-5 py-3 font-semibold text-white"
+                    >
+                      Seterusnya: CCC
+                      <ArrowRight size={16} />
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
