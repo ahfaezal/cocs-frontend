@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, ChevronRight, Info, Sparkles } from "lucide-react";
+import { ArrowLeft, ChevronRight, Info, Sparkles, Trash2 } from "lucide-react";
 
 import { CCPCHeader } from "@/components/ccpc/ccpc-header";
 import { CCPCStepProgress } from "@/components/ccpc/ccpc-step-progress";
@@ -68,6 +68,7 @@ type CCPCTargetGroup = {
 
 type CCPCPackage = {
   packageId?: string;
+  package_id?: string;
   packageName: string;
   includedTargets: Array<Record<string, unknown>>;
   consolidatedClusters: CCPCSummaryCluster[];
@@ -136,7 +137,7 @@ function normalisePackageClusters(packages: CCPCPackage[]) {
       ...cluster,
       id:
         cluster.id ||
-        `${ccpcPackage.packageId || `package-${packageIndex}`}-cluster-${clusterIndex + 1}`,
+        `${ccpcPackage.packageId || ccpcPackage.package_id || `package-${packageIndex}`}-cluster-${clusterIndex + 1}`,
       clusterName:
         cluster.clusterName ||
         cluster.suggestedName ||
@@ -333,6 +334,9 @@ function CCPCPageContent() {
   const [selectedPackageKeys, setSelectedPackageKeys] = useState<string[]>([]);
   const [selectedDocumentKeys, setSelectedDocumentKeys] = useState<string[]>([]);
   const [isSavingSelection, setIsSavingSelection] = useState(false);
+  const [cancellingPackageId, setCancellingPackageId] = useState<string | null>(
+    null
+  );
   const [packageName, setPackageName] = useState("");
   const [ccpcPackages, setCCPCPackages] = useState<CCPCPackage[]>([]);
   const [sessionStatus, setSessionStatus] = useState<SessionStatus>("draft");
@@ -795,6 +799,61 @@ function CCPCPageContent() {
     }
   }
 
+  async function handleCancelPackage(ccpcPackage: CCPCPackage) {
+    if (!canManageContent || !sessionName) return;
+
+    const packageId = ccpcPackage.packageId || ccpcPackage.package_id;
+
+    if (!packageId) {
+      alert("ID pakej gabungan tidak ditemui.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Batalkan gabungan "${ccpcPackage.packageName}"? Hasil asal level yang digabung akan dipaparkan semula.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setCancellingPackageId(packageId);
+
+      const res = await fetch(
+        `${API_URL}/ccpc/packages/${sessionName}/${encodeURIComponent(packageId)}`,
+        {
+          method: "DELETE",
+        }
+      );
+
+      if (!res.ok) {
+        const detail = await readResponseError(res);
+        throw new Error(`Gagal membatalkan gabungan (${res.status}): ${detail}`);
+      }
+
+      const data = await res.json();
+
+      if (data.success === false) {
+        throw new Error(data.message || "Gagal membatalkan gabungan.");
+      }
+
+      setCCPCPackages((prev) =>
+        prev.filter(
+          (item) => (item.packageId || item.package_id) !== packageId
+        )
+      );
+      setSelectedPackageKeys([]);
+    } catch (error) {
+      console.error("Gagal batalkan pakej gabungan:", error);
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Gagal membatalkan gabungan."
+      );
+    } finally {
+      setCancellingPackageId(null);
+    }
+  }
+
   if (!projectId) {
     return (
       <div className="space-y-4">
@@ -1062,16 +1121,37 @@ function CCPCPageContent() {
 
                   {ccpcPackages.length > 0 ? (
                     <div className="space-y-2">
-                      {ccpcPackages.map((item) => (
-                        <div
-                          key={item.packageId || item.packageName}
-                          className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"
-                        >
-                          <span className="font-bold">{item.packageName}</span>{" "}
-                          ({item.consolidatedClusters?.length || 0} Core
-                          Competency)
-                        </div>
-                      ))}
+                      {ccpcPackages.map((item) => {
+                        const packageId = item.packageId || item.package_id || "";
+                        const isCancelling = cancellingPackageId === packageId;
+
+                        return (
+                          <div
+                            key={packageId || item.packageName}
+                            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"
+                          >
+                            <div>
+                              <span className="font-bold">{item.packageName}</span>{" "}
+                              ({item.consolidatedClusters?.length || 0} Core
+                              Competency)
+                            </div>
+
+                            {canManageContent ? (
+                              <button
+                                type="button"
+                                onClick={() => handleCancelPackage(item)}
+                                disabled={isCancelling}
+                                className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                <Trash2 size={14} />
+                                {isCancelling
+                                  ? "Membatalkan..."
+                                  : "Batalkan Gabungan"}
+                              </button>
+                            ) : null}
+                          </div>
+                        );
+                      })}
                     </div>
                   ) : null}
                 </div>
