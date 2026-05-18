@@ -333,31 +333,6 @@ function formatLearningOutcomeFromAI(items: string[], competency: Competency) {
   return cleaned.join("\n");
 }
 
-function buildKnowledgePlaceholder(workSteps: string[]) {
-  const firstStep = cleanText(workSteps[0]) || "Laksana langkah kerja";
-  const secondStep = cleanText(workSteps[1]) || "Semak hasil kerja";
-
-  return `1.1 Informasi, keperluan kerja, peralatan dan bahan untuk ${firstStep}
-  - Standard kerja berkaitan
-  - Peralatan dan bahan yang diperlukan
-1.2 Informasi, prosedur dan kriteria kualiti untuk ${secondStep}`;
-}
-
-function getAsePlaceholder(type: "attitude" | "safety" | "environment") {
-  if (type === "attitude") {
-    return `1.1 Bergaul baik dengan rakan sekerja dan bekerjasama dalam aktiviti kerja.
-1.2 Teliti dalam membuat keputusan, jujur, berintegriti, tepat masa dan berdisiplin.`;
-  }
-
-  if (type === "safety") {
-    return `1.1 Berhati-hati dalam mengendalikan bahan, peralatan dan kawasan kerja berisiko.
-1.2 Gunakan PPE, papan tanda keselamatan dan kaedah kerja selamat.`;
-  }
-
-  return `1.1 Patuhi konsep 3R (reuse, reduce & recycle) semasa aktiviti kerja.
-1.2 Elakkan pencemaran alam sekitar dan urus sisa kerja dengan selamat.`;
-}
-
 function normalizeCCCCompetencyProfile(
   competency: Competency,
   profile?: Partial<CCCCompetencyProfile>
@@ -1520,16 +1495,6 @@ function CCCPageContent() {
                         LEARNING OUTCOMES
                       </th>
                       <td className="border border-slate-300 px-4 py-3">
-                        <div className="mb-3 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-800">
-                          Kekalkan ayat pembuka:{" "}
-                          <span className="font-bold">
-                            The learning outcomes of this competency are to enable
-                            the trainees to
-                          </span>
-                          . Senarai selepas ayat "Upon completion..." diambil
-                          daripada semua Competency Unit di bawah Core Competency
-                          ini.
-                        </div>
                         <textarea
                           value={selectedCCCProfile?.learningOutcomeIntro || ""}
                           onChange={(event) =>
@@ -1612,11 +1577,6 @@ Upon completion of this competency, trainees should be able to:
                             </div>
                           </td>
                           <td className="border border-slate-300 px-4 py-3 align-top">
-                            <p className="mb-2 text-xs leading-5 text-slate-500">
-                              Knowledge mesti 1:1 dengan Work Step. Jika Work Step
-                              ada 1.1 hingga 1.5, Knowledge juga perlu ada 1.1
-                              hingga 1.5 dan boleh tambah bullet di bawah ayat.
-                            </p>
                             <textarea
                               value={cccUnit.knowledge.join("\n")}
                               onChange={(event) =>
@@ -1628,7 +1588,7 @@ Upon completion of this competency, trainees should be able to:
                               }
                               rows={8}
                               className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm leading-6 outline-none focus:border-blue-500"
-                              placeholder={buildKnowledgePlaceholder(ccpUnit.workSteps)}
+                              placeholder="Knowledge akan dijana oleh AI atau boleh dikemaskini di sini."
                             />
                           </td>
                           <td className="border border-slate-300 px-4 py-3 align-top">
@@ -1653,13 +1613,6 @@ Upon completion of this competency, trainees should be able to:
                           </td>
                           <td className="border border-slate-300 px-4 py-3 align-top">
                             <div className="space-y-3">
-                              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">
-                                <span className="font-bold text-slate-800">
-                                  ATTITUDE
-                                </span>{" "}
-                                merangkumi disiplin, kerjasama, integriti, 5S,
-                                toleransi, ketepatan masa dan etika kerja.
-                              </div>
                               <textarea
                                 value={cccUnit.attitude.join("\n")}
                                 onChange={(event) =>
@@ -1671,16 +1624,8 @@ Upon completion of this competency, trainees should be able to:
                                 }
                                 rows={3}
                                 className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm leading-6 outline-none focus:border-blue-500"
-                                placeholder={getAsePlaceholder("attitude")}
+                                placeholder="Attitude"
                               />
-                              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">
-                                <span className="font-bold text-slate-800">
-                                  SAFETY
-                                </span>{" "}
-                                menerangkan langkah melindungi pekerja, operasi,
-                                peralatan dan persekitaran kerja daripada bahaya,
-                                risiko atau kemalangan.
-                              </div>
                               <textarea
                                 value={cccUnit.safety.join("\n")}
                                 onChange={(event) =>
@@ -1692,16 +1637,8 @@ Upon completion of this competency, trainees should be able to:
                                 }
                                 rows={3}
                                 className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm leading-6 outline-none focus:border-blue-500"
-                                placeholder={getAsePlaceholder("safety")}
+                                placeholder="Safety"
                               />
-                              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">
-                                <span className="font-bold text-slate-800">
-                                  ENVIRONMENT
-                                </span>{" "}
-                                menerangkan kawalan pencemaran, pengurusan sisa,
-                                3R dan langkah memelihara alam sekitar semasa
-                                kerja dijalankan.
-                              </div>
                               <textarea
                                 value={cccUnit.environment.join("\n")}
                                 onChange={(event) =>
@@ -1713,7 +1650,7 @@ Upon completion of this competency, trainees should be able to:
                                 }
                                 rows={3}
                                 className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm leading-6 outline-none focus:border-blue-500"
-                                placeholder={getAsePlaceholder("environment")}
+                                placeholder="Environment"
                               />
                             </div>
                           </td>
