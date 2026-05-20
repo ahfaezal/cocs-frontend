@@ -1228,11 +1228,12 @@ function CCPCPageContent() {
               sessionActive={sessionStatus !== "draft"}
             />
 
-            {sessionStatus === "active" ? (
+            {sessionStatus !== "draft" ? (
               <LiveBoardToolbar
                 readOnly={!canManageContent}
                 sessionId={sessionName}
                 projectId={projectId}
+                sessionStatus={sessionStatus}
               />
             ) : null}
 

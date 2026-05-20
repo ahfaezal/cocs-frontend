@@ -6,12 +6,14 @@ type LiveBoardToolbarProps = {
   readOnly?: boolean;
   sessionId: string;
   projectId?: string;
+  sessionStatus?: "active" | "closed" | "draft";
 };
 
 export function LiveBoardToolbar({
   readOnly = false,
   sessionId,
   projectId,
+  sessionStatus = "active",
 }: LiveBoardToolbarProps) {
   const liveBoardHref = projectId
     ? `/ccpc/live-board?sessionId=${encodeURIComponent(
@@ -33,8 +35,14 @@ export function LiveBoardToolbar({
           </p>
 
           <div className="mt-2 flex flex-wrap gap-2 text-xs">
-            <span className="rounded-full bg-emerald-100 px-3 py-1 font-medium text-emerald-700">
-              Live Active
+            <span
+              className={`rounded-full px-3 py-1 font-medium ${
+                sessionStatus === "closed"
+                  ? "bg-slate-100 text-slate-600"
+                  : "bg-emerald-100 text-emerald-700"
+              }`}
+            >
+              {sessionStatus === "closed" ? "Sesi Ditutup" : "Live Active"}
             </span>
 
             {readOnly ? (

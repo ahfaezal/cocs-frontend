@@ -63,6 +63,22 @@ function normaliseClusterItems(cluster: AICluster): string[] {
     .filter((item) => item.trim().length > 0);
 }
 
+function getTargetKey(target?: AICluster["target"]) {
+  const level = String(target?.level ?? "-").trim().toLowerCase();
+  const occupation = String(target?.occupationTitle ?? "ccpc")
+    .trim()
+    .toLowerCase();
+  const subarea = String(target?.subarea ?? "").trim().toLowerCase();
+
+  return [level, occupation, subarea].filter(Boolean).join("|");
+}
+
+function getTargetLabel(target?: AICluster["target"]) {
+  if (!target?.occupationTitle) return "Belum ditetapkan";
+
+  return `Level ${target.level || "-"} - ${target.occupationTitle}`;
+}
+
 export function CCPCAIClusterList({
   clusters,
   selectedClusterId,
@@ -157,6 +173,32 @@ export function CCPCAIClusterList({
     return readOnly || cluster.finalised;
   }
 
+  async function persistClusters(next: EditableCluster[]) {
+    if (readOnly || !sessionId) return false;
+
+    const clustersToSave = toAIClusters(next);
+    const res = await fetch(`${API_URL}/ccpc/clusters/${sessionId}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ clusters: clustersToSave }),
+    });
+
+    if (!res.ok) {
+      throw new Error("Gagal menyimpan hasil CCPC.");
+    }
+
+    if (onClustersChange) {
+      window.setTimeout(() => {
+        onClustersChange(clustersToSave);
+      }, 0);
+    }
+
+    setAllSaved(next.length > 0 && next.every((cluster) => cluster.finalised));
+    return true;
+  }
+
   function updateClusterName(clusterId: string, value: string) {
     updateEditableClusters((prev) =>
       prev.map((cluster) =>
@@ -182,7 +224,7 @@ export function CCPCAIClusterList({
     );
   }
 
-  function addCluster() {
+  function addCluster(target?: EditableCluster["target"], targetIndex?: number) {
     if (readOnly) return;
 
     const newId = `manual-${Date.now()}`;
@@ -191,9 +233,26 @@ export function CCPCAIClusterList({
       name: "Nama Cluster Baharu",
       items: [""],
       finalised: false,
+      target,
+      targetIndex,
     };
 
-    updateEditableClusters((prev) => [...prev, nextCluster]);
+    updateEditableClusters((prev) => {
+      if (!target) return [...prev, nextCluster];
+
+      const targetKey = getTargetKey(target);
+      const lastTargetIndex = prev.reduce((lastIndex, cluster, index) => {
+        return getTargetKey(cluster.target) === targetKey ? index : lastIndex;
+      }, -1);
+
+      if (lastTargetIndex < 0) return [...prev, nextCluster];
+
+      return [
+        ...prev.slice(0, lastTargetIndex + 1),
+        nextCluster,
+        ...prev.slice(lastTargetIndex + 1),
+      ];
+    });
     onSelect(newId);
   }
 
@@ -242,13 +301,29 @@ export function CCPCAIClusterList({
     });
   }
 
-  function saveCluster(clusterId: string) {
+  async function saveCluster(clusterId: string) {
     const cluster = editableClusters.find((item) => item.id === clusterId);
 
     if (!cluster || readOnly) return;
 
-    publishClusters(editableClusters);
-    alert(`Cluster "${cluster.name}" telah disimpan.`);
+    const next = editableClusters.map((item) =>
+      item.id === clusterId
+        ? {
+            ...item,
+            name: item.name.trim() || item.name,
+            items: item.items.filter((value) => value.trim().length > 0),
+          }
+        : item
+    );
+
+    try {
+      setEditableClusters(next);
+      await persistClusters(next);
+      alert(`Cluster "${cluster.name}" telah disimpan.`);
+    } catch (error) {
+      console.error("Gagal simpan cluster:", error);
+      alert(error instanceof Error ? error.message : "Gagal menyimpan cluster.");
+    }
   }
 
   function finaliseCluster(clusterId: string) {
@@ -289,6 +364,32 @@ export function CCPCAIClusterList({
   const allFinalised =
     editableClusters.length > 0 && finalisedCount === editableClusters.length;
   const canProceed = allFinalised && allSaved && canProceedExtra;
+  const clusterGroups = editableClusters.reduce<
+    Array<{
+      key: string;
+      label: string;
+      target?: EditableCluster["target"];
+      targetIndex?: number;
+      clusters: Array<{ cluster: EditableCluster; index: number }>;
+    }>
+  >((groups, cluster, index) => {
+    const key = getTargetKey(cluster.target);
+    let group = groups.find((item) => item.key === key);
+
+    if (!group) {
+      group = {
+        key,
+        label: getTargetLabel(cluster.target),
+        target: cluster.target,
+        targetIndex: cluster.targetIndex,
+        clusters: [],
+      };
+      groups.push(group);
+    }
+
+    group.clusters.push({ cluster, index });
+    return groups;
+  }, []);
 
   async function saveAllClusters() {
     if (readOnly || !sessionId || !allFinalised) return;
@@ -347,7 +448,7 @@ export function CCPCAIClusterList({
           {!readOnly ? (
             <button
               type="button"
-              onClick={addCluster}
+              onClick={() => addCluster()}
               className="inline-flex items-center gap-2 rounded-xl border border-blue-200 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-50"
             >
               <Plus size={16} />
@@ -375,15 +476,6 @@ export function CCPCAIClusterList({
 
         {!readOnly ? (
           <div className="flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={addCluster}
-              className="inline-flex items-center gap-2 rounded-xl border border-blue-200 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-50"
-            >
-              <Plus size={16} />
-              Tambah Nama Cluster
-            </button>
-
             {canProceed && (proceedHref || onProceed) ? (
               onProceed ? (
                 <button
@@ -434,8 +526,36 @@ export function CCPCAIClusterList({
         ) : null}
       </div>
 
-      <div className="space-y-5 p-4">
-        {editableClusters.map((cluster, index) => {
+      <div className="space-y-6 p-4">
+        {clusterGroups.map((group) => (
+          <section
+            key={group.key}
+            className="rounded-2xl border border-slate-200 bg-slate-50 p-3"
+          >
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3 px-1">
+              <div>
+                <h4 className="text-sm font-bold text-slate-800">
+                  {group.label}
+                </h4>
+                <p className="mt-1 text-xs text-slate-500">
+                  {group.clusters.length} Core Competency
+                </p>
+              </div>
+
+              {!readOnly ? (
+                <button
+                  type="button"
+                  onClick={() => addCluster(group.target, group.targetIndex)}
+                  className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-50"
+                >
+                  <Plus size={16} />
+                  Tambah Cluster
+                </button>
+              ) : null}
+            </div>
+
+            <div className="space-y-5">
+              {group.clusters.map(({ cluster, index }) => {
           const active = selectedClusterId === cluster.id;
           const locked = isClusterLocked(cluster);
 
@@ -454,13 +574,6 @@ export function CCPCAIClusterList({
                   <div className="mb-2 text-sm font-bold text-blue-700">
                     CL-{String(index + 1).padStart(2, "0")}
                   </div>
-
-                  {cluster.target?.occupationTitle ? (
-                    <div className="mb-3 inline-flex rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-700">
-                      Level {cluster.target.level || "-"} -{" "}
-                      {cluster.target.occupationTitle}
-                    </div>
-                  ) : null}
 
                   <label className="mb-1 block text-xs font-semibold text-slate-500">
                     Nama Cluster
@@ -553,7 +666,7 @@ export function CCPCAIClusterList({
                   </h4>
 
                   <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                    {cluster.items.length} kad
+                    {cluster.items.filter((item) => item.trim().length > 0).length} kad
                   </span>
                 </div>
 
@@ -613,6 +726,9 @@ export function CCPCAIClusterList({
             </div>
           );
         })}
+            </div>
+          </section>
+        ))}
       </div>
 
       {!readOnly ? (
