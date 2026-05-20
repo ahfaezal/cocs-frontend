@@ -409,6 +409,7 @@ function CCPCPageContent() {
     null
   );
   const [isRunningClustering, setIsRunningClustering] = useState(false);
+  const [clusteringElapsedSeconds, setClusteringElapsedSeconds] = useState(0);
   const [isRestoringTargets, setIsRestoringTargets] = useState(false);
   const [isConsolidating, setIsConsolidating] = useState(false);
   const [selectedPackageKeys, setSelectedPackageKeys] = useState<string[]>([]);
@@ -432,6 +433,19 @@ function CCPCPageContent() {
     status: "draft",
     laluanKerjaya: "-",
   });
+
+  useEffect(() => {
+    if (!isRunningClustering) {
+      setClusteringElapsedSeconds(0);
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setClusteringElapsedSeconds((prev) => prev + 1);
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [isRunningClustering]);
 
   const clusters = aiClusterResult?.clusters ?? [];
   const packagedTargetKeys = useMemo(
@@ -1249,6 +1263,13 @@ function CCPCPageContent() {
                       ? "Jalankan clustering AI berdasarkan DACUM Card."
                       : "Pegawai Penilai hanya boleh melihat hasil clustering."}
                   </p>
+                  {isRunningClustering ? (
+                    <p className="mt-2 text-sm font-semibold text-amber-700">
+                      AI sedang menyusun CCPC mengikut semua tahap dipilih. Masa
+                      menunggu: {clusteringElapsedSeconds}s. Proses biasanya
+                      mengambil 1-3 minit bergantung jumlah kad.
+                    </p>
+                  ) : null}
                 </div>
 
                 {canManageContent ? (
@@ -1259,7 +1280,7 @@ function CCPCPageContent() {
                     className="rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
                   >
                     {isRunningClustering
-                      ? "Running AI..."
+                      ? `Running AI... ${clusteringElapsedSeconds}s`
                       : "Run AI Clustering"}
                   </button>
                 ) : null}

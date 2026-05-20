@@ -32,7 +32,10 @@ type COSMatrix = {
   levels: Record<number, string[]>;
   selectedDevelopmentLevels: number[];
   selectedDevelopmentTargets: COSDevelopmentTarget[];
+  developmentPackage?: DevelopmentPackage;
 };
+
+type DevelopmentPackage = "" | "1-3" | "4-6";
 
 function COSDocumentMode({
   projectInfo,
@@ -124,6 +127,25 @@ function COSDocumentMode({
 }
 
 const LEVELS = [6, 5, 4, 3, 2, 1];
+const DEVELOPMENT_PACKAGES: Array<{
+  value: Exclude<DevelopmentPackage, "">;
+  label: string;
+  levels: number[];
+  description: string;
+}> = [
+  {
+    value: "1-3",
+    label: "Pakej Tahap 1-3",
+    levels: [1, 2, 3],
+    description: "Pembangunan dokumen bagi operasi asas hingga kerja mahir.",
+  },
+  {
+    value: "4-6",
+    label: "Pakej Tahap 4-6",
+    levels: [4, 5, 6],
+    description: "Pembangunan dokumen bagi penyeliaan, pengurusan dan pakar.",
+  },
+];
 
 const COMPETENCY_LEVEL_DEFINITIONS: Record<number, string> = {
   1: "Basic general and foundation knowledge and skills under close supervision.",
@@ -147,7 +169,15 @@ function createEmptyMatrix(): COSMatrix {
     },
     selectedDevelopmentLevels: [],
     selectedDevelopmentTargets: [],
+    developmentPackage: "",
   };
+}
+
+function getPackageLevels(packageValue?: DevelopmentPackage) {
+  return (
+    DEVELOPMENT_PACKAGES.find((item) => item.value === packageValue)?.levels ??
+    []
+  );
 }
 
 function getDevelopmentTargets(matrix: COSMatrix) {
@@ -175,6 +205,7 @@ function normalizeMatrixForSave(matrix: COSMatrix): COSMatrix {
     selectedDevelopmentLevels: Array.from(
       new Set(selectedDevelopmentTargets.map((target) => target.level))
     ).sort((a, b) => a - b),
+    developmentPackage: matrix.developmentPackage ?? "",
   };
 }
 
@@ -313,6 +344,7 @@ function COSPageContent() {
                 backendData.matrix.selectedDevelopmentLevels ?? [],
               selectedDevelopmentTargets:
                 backendData.matrix.selectedDevelopmentTargets ?? [],
+              developmentPackage: backendData.matrix.developmentPackage ?? "",
             });
             setHasSavedCOS(true);
             setHasUnsavedChanges(false);
@@ -369,6 +401,7 @@ function COSPageContent() {
         levels: nextLevels,
         selectedDevelopmentLevels: prev.selectedDevelopmentLevels,
         selectedDevelopmentTargets: prev.selectedDevelopmentTargets ?? [],
+        developmentPackage: prev.developmentPackage ?? "",
       };
     });
   }
@@ -417,6 +450,27 @@ function COSPageContent() {
           new Set(selectedDevelopmentTargets.map((target) => target.level))
         ).sort((a, b) => a - b),
         selectedDevelopmentTargets,
+        developmentPackage: prev.developmentPackage ?? "",
+      };
+    });
+  }
+
+  function updateDevelopmentPackage(value: DevelopmentPackage) {
+    setMessage("");
+    setErrorMessage("");
+    setHasUnsavedChanges(true);
+    setMatrix((prev) => {
+      const packageLevels = getPackageLevels(value);
+      const selectedDevelopmentTargets = (prev.selectedDevelopmentTargets ?? [])
+        .filter((target) => packageLevels.includes(target.level));
+
+      return {
+        ...prev,
+        developmentPackage: value,
+        selectedDevelopmentTargets,
+        selectedDevelopmentLevels: Array.from(
+          new Set(selectedDevelopmentTargets.map((target) => target.level))
+        ).sort((a, b) => a - b),
       };
     });
   }
@@ -454,6 +508,20 @@ function COSPageContent() {
     setErrorMessage("");
     setHasUnsavedChanges(true);
     setMatrix((prev) => {
+      const packageLevels = getPackageLevels(prev.developmentPackage);
+
+      if (packageLevels.length === 0) {
+        setErrorMessage("Sila pilih pakej pembangunan Tahap 1-3 atau Tahap 4-6 dahulu.");
+        return prev;
+      }
+
+      if (!packageLevels.includes(level)) {
+        setErrorMessage(
+          `Level ${level} tidak termasuk dalam ${prev.developmentPackage === "1-3" ? "Pakej Tahap 1-3" : "Pakej Tahap 4-6"}.`
+        );
+        return prev;
+      }
+
       const currentTargets = prev.selectedDevelopmentTargets ?? [];
       const exists = currentTargets.some(
         (target) => target.level === level && target.columnIndex === columnIndex
@@ -486,6 +554,10 @@ function COSPageContent() {
 
   const selectedDevelopmentTargets = getDevelopmentTargets(matrix);
   const selectedDevelopmentLevels = getSelectedDevelopmentLevels(matrix);
+  const selectedPackageLevels = getPackageLevels(matrix.developmentPackage);
+  const missingPackageLevels = selectedPackageLevels.filter(
+    (level) => !selectedDevelopmentLevels.includes(level)
+  );
 
   async function handleSaveCOS() {
     if (!projectId) {
@@ -494,10 +566,28 @@ function COSPageContent() {
     }
 
     const nextMatrix = normalizeMatrixForSave(matrix);
+    const packageLevels = getPackageLevels(nextMatrix.developmentPackage);
+
+    if (packageLevels.length === 0) {
+      setErrorMessage("Sila pilih pakej pembangunan Tahap 1-3 atau Tahap 4-6 sebelum Save.");
+      return false;
+    }
 
     if (nextMatrix.selectedDevelopmentTargets.length === 0) {
       setErrorMessage(
-        "Sila tick sekurang-kurangnya satu nama jawatan dalam jadual COS sebelum Save."
+        "Sila tick nama jawatan dalam pakej pembangunan sebelum Save."
+      );
+      return false;
+    }
+
+    const selectedLevels = new Set(
+      nextMatrix.selectedDevelopmentTargets.map((target) => target.level)
+    );
+    const missingLevels = packageLevels.filter((level) => !selectedLevels.has(level));
+
+    if (missingLevels.length > 0) {
+      setErrorMessage(
+        `Pakej ${nextMatrix.developmentPackage} belum lengkap. Sila tick jawatan untuk Level ${missingLevels.join(", Level ")}.`
       );
       return false;
     }
@@ -536,6 +626,13 @@ function COSPageContent() {
     if (selectedDevelopmentTargets.length === 0) {
       setErrorMessage(
         "Sila tick sekurang-kurangnya satu nama jawatan dalam jadual COS sebelum meneruskan ke CCPC."
+      );
+      return;
+    }
+
+    if (missingPackageLevels.length > 0) {
+      setErrorMessage(
+        `Pakej ${matrix.developmentPackage} belum lengkap. Sila tick jawatan untuk Level ${missingPackageLevels.join(", Level ")}.`
       );
       return;
     }
@@ -688,22 +785,70 @@ function COSPageContent() {
             Skop Tahap Pembangunan
           </h2>
           <p className="mt-1 text-sm text-slate-500">
-            Rujukan ringkas tahap CSQF. Pilihan sebenar dibuat melalui tick pada nama jawatan dalam jadual COS.
+            Pilih pakej pembangunan yang diarahkan oleh CIDB, kemudian tick nama jawatan mengikut tahap dalam pakej tersebut.
           </p>
         </div>
 
-        <div className="grid gap-3 p-6 md:grid-cols-2 xl:grid-cols-3">
-          {[1, 2, 3, 4, 5, 6].map((level) => (
-            <div
-              key={`development-level-${level}`}
-              className="min-h-28 rounded-xl border border-slate-200 bg-white p-4"
-            >
-              <div className="font-bold text-slate-900">Level {level}</div>
-              <p className="mt-1 text-sm leading-6 text-slate-600">
-                {COMPETENCY_LEVEL_DEFINITIONS[level]}
-              </p>
-            </div>
-          ))}
+        <div className="space-y-5 p-6">
+          <div className="grid gap-3 md:grid-cols-2">
+            {DEVELOPMENT_PACKAGES.map((item) => {
+              const selected = matrix.developmentPackage === item.value;
+
+              return (
+                <button
+                  key={item.value}
+                  type="button"
+                  onClick={() => updateDevelopmentPackage(item.value)}
+                  disabled={!canEditCOS}
+                  className={`rounded-2xl border px-5 py-4 text-left transition ${
+                    selected
+                      ? "border-blue-400 bg-blue-50 text-blue-900"
+                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                  } disabled:cursor-not-allowed disabled:opacity-60`}
+                >
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={`flex h-5 w-5 items-center justify-center rounded-full border ${
+                        selected
+                          ? "border-blue-600 bg-blue-600"
+                          : "border-slate-300 bg-white"
+                      }`}
+                    >
+                      {selected ? (
+                        <span className="h-2 w-2 rounded-full bg-white" />
+                      ) : null}
+                    </span>
+                    <span className="font-bold">{item.label}</span>
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">
+                    {item.description}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {[1, 2, 3, 4, 5, 6].map((level) => {
+              const inPackage = selectedPackageLevels.includes(level);
+
+              return (
+                <div
+                  key={`development-level-${level}`}
+                  className={`min-h-28 rounded-xl border p-4 ${
+                    inPackage
+                      ? "border-blue-200 bg-blue-50"
+                      : "border-slate-200 bg-white"
+                  }`}
+                >
+                  <div className="font-bold text-slate-900">Level {level}</div>
+                  <p className="mt-1 text-sm leading-6 text-slate-600">
+                    {COMPETENCY_LEVEL_DEFINITIONS[level]}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
 
@@ -720,7 +865,7 @@ function COSPageContent() {
               Lengkapkan struktur pekerjaan berdasarkan perbincangan bersama ahli panel.
             </p>
             <p className="mt-1 text-xs font-medium text-slate-500">
-              Tick nama jawatan yang hendak dibangunkan untuk proses CCPC.
+              Tick nama jawatan dalam pakej yang dipilih untuk proses CCPC.
             </p>
           </div>
 
@@ -831,6 +976,9 @@ function COSPageContent() {
                                 target.level === level &&
                                 target.columnIndex === columnIndex
                             );
+                          const levelAllowed =
+                            selectedPackageLevels.length > 0 &&
+                            selectedPackageLevels.includes(level);
 
                           return (
                             <div className="flex items-center gap-2">
@@ -855,7 +1003,7 @@ function COSPageContent() {
                                 onChange={() =>
                                   toggleDevelopmentTarget(level, columnIndex)
                                 }
-                                disabled={!canEditCOS || !value.trim()}
+                                disabled={!canEditCOS || !value.trim() || !levelAllowed}
                                 className="h-4 w-4 shrink-0 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
                               />
                             </div>
@@ -876,7 +1024,7 @@ function COSPageContent() {
         <p className="text-sm text-slate-500">
           {hasSavedCOS && !hasUnsavedChanges
             ? "COS telah disimpan dan sedia untuk proses CCPC."
-            : "Tick nama jawatan yang hendak dibangunkan, kemudian klik Save sebelum bergerak ke langkah seterusnya."}
+            : "Pilih pakej, tick jawatan untuk setiap tahap dalam pakej, kemudian klik Save sebelum bergerak ke langkah seterusnya."}
           {selectedDevelopmentTargets.length > 0 ? (
             <span className="ml-2 font-semibold text-blue-700">
               {selectedDevelopmentTargets.length} jawatan dipilih
@@ -905,7 +1053,8 @@ function COSPageContent() {
               saving ||
               !hasSavedCOS ||
               hasUnsavedChanges ||
-              selectedDevelopmentTargets.length === 0
+              selectedDevelopmentTargets.length === 0 ||
+              missingPackageLevels.length > 0
             }
             className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
         >
