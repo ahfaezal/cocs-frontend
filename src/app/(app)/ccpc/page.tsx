@@ -746,7 +746,7 @@ function CCPCPageContent() {
   async function handleRunAIClustering() {
     if (!canManageContent) return;
 
-    if (sessionStatus !== "active") {
+    if (sessionStatus === "draft") {
       alert("Aktifkan sesi DACUM dahulu sebelum menjalankan AI clustering.");
       return;
     }
@@ -1276,7 +1276,7 @@ function CCPCPageContent() {
                   <button
                     type="button"
                     onClick={handleRunAIClustering}
-                    disabled={isRunningClustering || sessionStatus !== "active"}
+                    disabled={isRunningClustering || sessionStatus === "draft"}
                     className="rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
                   >
                     {isRunningClustering
