@@ -10,6 +10,7 @@ type DacumSessionCardProps = {
   standardTitle?: string;
   readOnly?: boolean;
   sessionId?: string;
+  sessionIds?: string[];
   refreshActive?: boolean;
   sessionStatus?: SessionStatus;
   onActivateSession?: () => void;
@@ -48,6 +49,7 @@ export function DacumSessionCard({
   standardTitle,
   readOnly = false,
   sessionId = "",
+  sessionIds = [],
   refreshActive = false,
   sessionStatus = "draft",
   onActivateSession,
@@ -57,9 +59,15 @@ export function DacumSessionCard({
   const currentStatus = statusConfig[sessionStatus];
   const [cardCount, setCardCount] = useState(0);
   const [panelCount, setPanelCount] = useState(0);
+  const effectiveSessionIds = [
+    sessionId,
+    ...sessionIds,
+  ].filter((value, index, values): value is string => {
+    return Boolean(value) && values.indexOf(value) === index;
+  });
 
   useEffect(() => {
-    if (!sessionId) {
+    if (effectiveSessionIds.length === 0) {
       setCardCount(0);
       setPanelCount(0);
       return;
@@ -69,16 +77,21 @@ export function DacumSessionCard({
 
     async function loadCounts() {
       try {
-        const res = await fetch(`${API_URL}/ccpc/cards/${sessionId}`, {
-          cache: "no-store",
-        });
+        const cardGroups = await Promise.all(
+          effectiveSessionIds.map(async (currentSessionId) => {
+            const res = await fetch(`${API_URL}/ccpc/cards/${currentSessionId}`, {
+              cache: "no-store",
+            });
 
-        if (!res.ok) {
-          throw new Error("Gagal mendapatkan kiraan kad DACUM.");
-        }
+            if (!res.ok) {
+              throw new Error("Gagal mendapatkan kiraan kad DACUM.");
+            }
 
-        const data: CCPCCard[] = await res.json();
-        const cards = Array.isArray(data) ? data : [];
+            const data: CCPCCard[] = await res.json();
+            return Array.isArray(data) ? data : [];
+          })
+        );
+        const cards = cardGroups.flat();
 
         if (!cancelled) {
           setCardCount(cards.length);
@@ -108,7 +121,7 @@ export function DacumSessionCard({
       cancelled = true;
       if (timer) window.clearInterval(timer);
     };
-  }, [refreshActive, sessionId]);
+  }, [refreshActive, effectiveSessionIds.join("|")]);
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">

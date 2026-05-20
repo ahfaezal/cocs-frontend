@@ -607,6 +607,20 @@ function CCPCPageContent() {
     const slug = slugify(standardTitle || projectInfo.title || "dacum-session");
     return projectId ? `project-${projectId}-${slug}` : slug;
   }, [projectId, projectInfo.title, standardTitle]);
+  const sessionIdsForCards = useMemo(() => {
+    const sessionIds = [
+      sessionName,
+      projectId && projectInfo.title
+        ? `project-${projectId}-${slugify(projectInfo.title)}`
+        : "",
+      ...selectedDevelopmentTargets.map((target) => {
+        const slug = slugify(target.occupationTitle || "");
+        return projectId && slug ? `project-${projectId}-${slug}` : "";
+      }),
+    ].filter(Boolean);
+
+    return Array.from(new Set(sessionIds));
+  }, [projectId, projectInfo.title, selectedDevelopmentTargets, sessionName]);
 
   const cosHref = projectId ? `/cos?projectId=${projectId}` : "/cos";
 
@@ -733,6 +747,7 @@ function CCPCPageContent() {
         },
         body: JSON.stringify({
           session_id: sessionName,
+          session_ids: sessionIdsForCards,
           project_id: projectId,
         }),
       });
@@ -789,6 +804,7 @@ function CCPCPageContent() {
         },
         body: JSON.stringify({
           session_id: sessionName,
+          session_ids: sessionIdsForCards,
           project_id: projectId,
         }),
       });
@@ -1190,6 +1206,7 @@ function CCPCPageContent() {
                 standardTitle={standardTitle}
                 readOnly={!canManageContent}
                 sessionId={sessionName}
+                sessionIds={sessionIdsForCards}
                 refreshActive={sessionStatus === "active"}
                 sessionStatus={sessionStatus}
                 onActivateSession={handleActivateSession}
@@ -1206,6 +1223,7 @@ function CCPCPageContent() {
 
             <PanelSubmissionList
               sessionId={sessionName}
+              sessionIds={sessionIdsForCards}
               refreshActive={sessionStatus === "active"}
               sessionActive={sessionStatus !== "draft"}
             />
@@ -1250,6 +1268,7 @@ function CCPCPageContent() {
                 result={displayAIClusterResult}
                 isRunning={isRunningClustering}
                 sessionId={sessionName}
+                sessionIds={sessionIdsForCards}
                 refreshActive={sessionStatus === "active"}
                 sessionActive={sessionStatus !== "draft"}
               />

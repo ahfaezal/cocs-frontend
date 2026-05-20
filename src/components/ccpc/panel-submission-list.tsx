@@ -21,6 +21,7 @@ type PanelSummary = {
 
 type PanelSubmissionListProps = {
   sessionId: string;
+  sessionIds?: string[];
   sessionActive?: boolean;
   refreshActive?: boolean;
 };
@@ -51,15 +52,22 @@ const RANK_STYLES = [
 
 export function PanelSubmissionList({
   sessionId,
+  sessionIds = [],
   sessionActive = false,
   refreshActive = false,
 }: PanelSubmissionListProps) {
   const [items, setItems] = useState<PanelSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const effectiveSessionIds = [
+    sessionId,
+    ...sessionIds,
+  ].filter((value, index, values): value is string => {
+    return Boolean(value) && values.indexOf(value) === index;
+  });
 
   useEffect(() => {
-    if (!sessionActive || !sessionId) return;
+    if (!sessionActive || effectiveSessionIds.length === 0) return;
 
     let cancelled = false;
 
@@ -68,15 +76,21 @@ export function PanelSubmissionList({
         setLoading(true);
         setErrorMessage("");
 
-        const res = await fetch(`${API_URL}/ccpc/cards/${sessionId}`, {
-          cache: "no-store",
-        });
+        const cardGroups = await Promise.all(
+          effectiveSessionIds.map(async (currentSessionId) => {
+            const res = await fetch(`${API_URL}/ccpc/cards/${currentSessionId}`, {
+              cache: "no-store",
+            });
 
-        if (!res.ok) {
-          throw new Error("Gagal mendapatkan data panel.");
-        }
+            if (!res.ok) {
+              throw new Error("Gagal mendapatkan data panel.");
+            }
 
-        const data: CCPCCard[] = await res.json();
+            const data: CCPCCard[] = await res.json();
+            return Array.isArray(data) ? data : [];
+          })
+        );
+        const data = cardGroups.flat();
         const grouped: Record<string, PanelSummary> = {};
 
         data.forEach((card) => {
@@ -132,7 +146,7 @@ export function PanelSubmissionList({
       cancelled = true;
       if (timer) clearInterval(timer);
     };
-  }, [refreshActive, sessionActive, sessionId]);
+  }, [refreshActive, sessionActive, sessionId, effectiveSessionIds.join("|")]);
 
   if (!sessionActive || (!loading && !errorMessage && items.length === 0)) {
     return null;

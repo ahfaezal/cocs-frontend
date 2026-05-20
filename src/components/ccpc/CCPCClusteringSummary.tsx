@@ -19,6 +19,7 @@ interface CCPCClusteringSummaryProps {
   result: unknown;
   isRunning: boolean;
   sessionId: string;
+  sessionIds?: string[];
   sessionActive?: boolean;
   refreshActive?: boolean;
 }
@@ -26,15 +27,22 @@ interface CCPCClusteringSummaryProps {
 export function CCPCClusteringSummary({
   isRunning,
   sessionId,
+  sessionIds = [],
   sessionActive = false,
   refreshActive = false,
 }: CCPCClusteringSummaryProps) {
   const [cards, setCards] = useState<CCPCCard[]>([]);
   const [clusters, setClusters] = useState<CCPCCluster[]>([]);
   const [errorMessage, setErrorMessage] = useState("");
+  const effectiveSessionIds = [
+    sessionId,
+    ...sessionIds,
+  ].filter((value, index, values): value is string => {
+    return Boolean(value) && values.indexOf(value) === index;
+  });
 
   useEffect(() => {
-    if (!sessionActive || !sessionId) return;
+    if (!sessionActive || effectiveSessionIds.length === 0) return;
 
     let cancelled = false;
 
@@ -42,18 +50,23 @@ export function CCPCClusteringSummary({
       try {
         setErrorMessage("");
 
-        const cardsRes = await fetch(`${API_URL}/ccpc/cards/${sessionId}`, {
-          cache: "no-store",
-        });
+        const cardGroups = await Promise.all(
+          effectiveSessionIds.map(async (currentSessionId) => {
+            const cardsRes = await fetch(`${API_URL}/ccpc/cards/${currentSessionId}`, {
+              cache: "no-store",
+            });
 
-        if (!cardsRes.ok) {
-          throw new Error("Gagal mendapatkan kad DACUM.");
-        }
+            if (!cardsRes.ok) {
+              throw new Error("Gagal mendapatkan kad DACUM.");
+            }
 
-        const cardsData = await cardsRes.json();
+            const cardsData = await cardsRes.json();
+            return Array.isArray(cardsData) ? cardsData : [];
+          })
+        );
 
         if (!cancelled) {
-          setCards(Array.isArray(cardsData) ? cardsData : []);
+          setCards(cardGroups.flat());
         }
 
         const clustersRes = await fetch(`${API_URL}/ccpc/clusters/${sessionId}`, {
@@ -91,7 +104,7 @@ export function CCPCClusteringSummary({
       cancelled = true;
       if (timer) clearInterval(timer);
     };
-  }, [refreshActive, sessionActive, sessionId]);
+  }, [refreshActive, sessionActive, sessionId, effectiveSessionIds.join("|")]);
 
   const totalCards = sessionActive ? cards.length : 0;
   const uniqueCards = sessionActive
