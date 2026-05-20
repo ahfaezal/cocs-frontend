@@ -14,19 +14,27 @@ type CCPCCard = {
 
 type DacumCardGridProps = {
   sessionId: string;
+  sessionIds?: string[];
   sessionActive?: boolean;
+  refreshActive?: boolean;
 };
 
 export function DacumCardGrid({
   sessionId,
+  sessionIds = [],
   sessionActive = false,
+  refreshActive = true,
 }: DacumCardGridProps) {
   const [cards, setCards] = useState<CCPCCard[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const effectiveSessionIds = Array.from(
+    new Set([sessionId, ...sessionIds].filter(Boolean))
+  );
+  const sessionIdsKey = effectiveSessionIds.join("|");
 
   useEffect(() => {
-    if (!sessionActive || !sessionId) return;
+    if (!sessionActive || effectiveSessionIds.length === 0) return;
 
     let cancelled = false;
 
@@ -35,18 +43,31 @@ export function DacumCardGrid({
         setLoading(true);
         setError("");
 
-        const res = await fetch(`${API_URL}/ccpc/cards/${sessionId}`, {
-          cache: "no-store",
-        });
+        const cardGroups = await Promise.all(
+          effectiveSessionIds.map(async (item) => {
+            const res = await fetch(`${API_URL}/ccpc/cards/${item}`, {
+              cache: "no-store",
+            });
 
-        if (!res.ok) {
-          throw new Error("Gagal mendapatkan senarai kad DACUM.");
-        }
+            if (!res.ok) {
+              throw new Error("Gagal mendapatkan senarai kad DACUM.");
+            }
 
-        const data = await res.json();
+            const data = await res.json();
+            return Array.isArray(data) ? (data as CCPCCard[]) : [];
+          })
+        );
 
         if (!cancelled) {
-          setCards(Array.isArray(data) ? data : []);
+          setCards(
+            cardGroups
+              .flat()
+              .sort(
+                (a, b) =>
+                  new Date(b.created_at).getTime() -
+                  new Date(a.created_at).getTime()
+              )
+          );
         }
       } catch (error) {
         console.error("Gagal load DACUM cards:", error);
@@ -64,13 +85,13 @@ export function DacumCardGrid({
 
     loadCards();
 
-    const timer = setInterval(loadCards, 3000);
+    const timer = refreshActive ? setInterval(loadCards, 3000) : undefined;
 
     return () => {
       cancelled = true;
-      clearInterval(timer);
+      if (timer) clearInterval(timer);
     };
-  }, [sessionActive, sessionId]);
+  }, [sessionActive, refreshActive, sessionIdsKey]);
 
   if (!sessionActive) {
     return null;

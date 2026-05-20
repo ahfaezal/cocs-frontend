@@ -5,6 +5,7 @@ import { ExternalLink } from "lucide-react";
 type LiveBoardToolbarProps = {
   readOnly?: boolean;
   sessionId: string;
+  sessionIds?: string[];
   projectId?: string;
   sessionStatus?: "active" | "closed" | "draft";
 };
@@ -12,14 +13,22 @@ type LiveBoardToolbarProps = {
 export function LiveBoardToolbar({
   readOnly = false,
   sessionId,
+  sessionIds = [],
   projectId,
   sessionStatus = "active",
 }: LiveBoardToolbarProps) {
-  const liveBoardHref = projectId
-    ? `/ccpc/live-board?sessionId=${encodeURIComponent(
-        sessionId
-      )}&projectId=${encodeURIComponent(projectId)}`
-    : `/ccpc/live-board?sessionId=${encodeURIComponent(sessionId)}`;
+  const liveBoardParams = new URLSearchParams();
+  const effectiveSessionIds = Array.from(
+    new Set([sessionId, ...sessionIds].filter(Boolean))
+  );
+
+  liveBoardParams.set("sessionId", sessionId);
+  if (projectId) liveBoardParams.set("projectId", projectId);
+  effectiveSessionIds.forEach((item) => {
+    liveBoardParams.append("sessionIds", item);
+  });
+
+  const liveBoardHref = `/ccpc/live-board?${liveBoardParams.toString()}`;
   const canOpenLiveBoard = Boolean(sessionId);
 
   return (

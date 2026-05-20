@@ -1246,6 +1246,7 @@ function CCPCPageContent() {
               <LiveBoardToolbar
                 readOnly={!canManageContent}
                 sessionId={sessionName}
+                sessionIds={sessionIdsForCards}
                 projectId={projectId}
                 sessionStatus={sessionStatus}
               />

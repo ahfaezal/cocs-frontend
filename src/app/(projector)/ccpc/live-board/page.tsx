@@ -12,6 +12,9 @@ function LiveBoardContent() {
   const searchParams = useSearchParams();
   const [freeze, setFreeze] = useState(false);
   const sessionId = searchParams.get("sessionId") || DEFAULT_SESSION_ID;
+  const sessionIds = Array.from(
+    new Set([sessionId, ...searchParams.getAll("sessionIds")].filter(Boolean))
+  );
   const projectId = searchParams.get("projectId") || "";
   const backHref = projectId ? `/ccpc?projectId=${projectId}` : "/ccpc";
 
@@ -29,7 +32,10 @@ function LiveBoardContent() {
                 Live Board (DACUM Card)
               </h1>
 
-              <p className="text-sm text-slate-500">Session: {sessionId}</p>
+              <p className="text-sm text-slate-500">
+                Session: {sessionId}
+                {sessionIds.length > 1 ? ` (${sessionIds.length} sesi)` : ""}
+              </p>
             </div>
           </div>
 
@@ -70,7 +76,12 @@ function LiveBoardContent() {
       )}
 
       <div className="p-6">
-        <DacumCardGrid sessionId={sessionId} sessionActive={!freeze} />
+        <DacumCardGrid
+          sessionId={sessionId}
+          sessionIds={sessionIds}
+          sessionActive
+          refreshActive={!freeze}
+        />
       </div>
     </main>
   );
